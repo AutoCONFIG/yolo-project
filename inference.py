@@ -128,12 +128,14 @@ class YOLOInference:
         device: str = "auto",
         imgsz: int = 640,
         classes: Optional[List[int]] = None,
+        batch_size: int = 1,
     ):
         self.model_path = Path(model_path)
         self.nms_config = nms_config or NMSConfig()
         self.device = device
         self.imgsz = imgsz
         self.classes_filter = classes
+        self.batch_size = batch_size
 
         # Detect model format
         self.model_format = self._detect_format()
@@ -619,6 +621,169 @@ class YOLOInference:
 
         return result
 
+    def inference_batch_pytorch(self, images: List[np.ndarray]) -> List[ImageResult]:
+        """Run batch inference with PyTorch model."""
+        start_time = time.perf_counter()
+
+        results = self.model.predict(
+            images,
+            imgsz=self.imgsz,
+            conf=self.nms_config.conf_threshold,
+            iou=self.nms_config.iou_threshold,
+            max_det=self.nms_config.max_detections,
+            agnostic_nms=self.nms_config.agnostic,
+            classes=self.classes_filter,
+            verbose=False,
+        )
+
+        inference_time = time.perf_counter() - start_time
+        per_image_time = inference_time / len(images)
+
+        all_results = []
+        task_type = self._detect_task_type()
+
+        for idx, result in enumerate(results):
+            image_shape = images[idx].shape[:2]
+            detections = []
+            probs = None
+            obb_boxes = None
+
+            # Handle classification task
+            if result.probs is not None:
+                task_type = "classify"
+                probs = []
+                for class_idx in result.probs.top5:
+                    class_name = self.classes.get(class_idx, f"class_{class_idx}")
+                    prob = float(result.probs.data[class_idx])
+                    probs.append((class_name, prob))
+
+            # Handle OBB task
+            elif result.obb is not None:
+                task_type = "obb"
+                obb_boxes = []
+                for i in range(len(result.obb)):
+                    box = result.obb[i]
+                    xyxyxyxy = box.xyxyxyxy.squeeze().cpu().numpy()
+                    conf = float(box.conf.cpu().numpy())
+                    class_id = int(box.cls.cpu().numpy())
+                    class_name = self.classes.get(class_id, f"class_{class_id}")
+
+                    detections.append(
+                        DetectionResult(
+                            bbox=box.xyxy.squeeze().cpu().numpy().tolist(),
+                            confidence=conf,
+                            class_id=class_id,
+                            class_name=class_name,
+                        )
+                    )
+                    obb_boxes.append({
+                        "points": xyxyxyxy.reshape(-1, 2).tolist(),
+                        "confidence": conf,
+                        "class_id": class_id,
+                        "class_name": class_name,
+                    })
+
+            # Handle segmentation task
+            elif result.masks is not None:
+                task_type = "segment"
+                for i in range(len(result.boxes)):
+                    box = result.boxes[i]
+                    x1, y1, x2, y2 = box.xyxy.squeeze().cpu().numpy().tolist()
+                    conf = box.conf.cpu().numpy()
+                    conf = float(conf.item() if conf.ndim == 0 else conf.squeeze())
+                    class_id = int(box.cls.cpu().numpy().squeeze())
+                    class_name = self.classes.get(class_id, f"class_{class_id}")
+
+                    # Get mask
+                    mask = None
+                    if result.masks is not None and i < len(result.masks):
+                        mask_tensor = result.masks[i].data
+                        mask = mask_tensor.cpu().numpy().squeeze()
+                        # Resize mask to original image size
+                        mask_h, mask_w = mask.shape
+                        orig_h, orig_w = image_shape
+                        if mask_h != orig_h or mask_w != orig_w:
+                            mask = cv2.resize(mask.astype(np.uint8), (orig_w, orig_h), interpolation=cv2.INTER_NEAREST)
+
+                    detections.append(
+                        DetectionResult(
+                            bbox=[x1, y1, x2, y2],
+                            confidence=conf,
+                            class_id=class_id,
+                            class_name=class_name,
+                            mask=mask,
+                        )
+                    )
+
+            # Handle pose task
+            elif result.keypoints is not None:
+                task_type = "pose"
+                for i in range(len(result.boxes)):
+                    box = result.boxes[i]
+                    x1, y1, x2, y2 = box.xyxy.squeeze().cpu().numpy().tolist()
+                    conf = box.conf.cpu().numpy()
+                    conf = float(conf.item() if conf.ndim == 0 else conf.squeeze())
+                    class_id = int(box.cls.cpu().numpy().squeeze())
+                    class_name = self.classes.get(class_id, f"class_{class_id}")
+
+                    # Get keypoints
+                    keypoints = None
+                    if result.keypoints is not None and i < len(result.keypoints):
+                        kpts_data = result.keypoints[i].data.cpu().numpy()
+                        keypoints = kpts_data.tolist()
+
+                    detections.append(
+                        DetectionResult(
+                            bbox=[x1, y1, x2, y2],
+                            confidence=conf,
+                            class_id=class_id,
+                            class_name=class_name,
+                            keypoints=keypoints,
+                        )
+                    )
+
+            # Handle detection task
+            elif result.boxes is not None:
+                for i in range(len(result.boxes)):
+                    box = result.boxes[i]
+                    x1, y1, x2, y2 = box.xyxy.squeeze().cpu().numpy().tolist()
+                    conf = box.conf.cpu().numpy()
+                    conf = float(conf.item() if conf.ndim == 0 else conf.squeeze())
+                    class_id = int(box.cls.cpu().numpy().squeeze())
+                    class_name = self.classes.get(class_id, f"class_{class_id}")
+
+                    detections.append(
+                        DetectionResult(
+                            bbox=[x1, y1, x2, y2],
+                            confidence=conf,
+                            class_id=class_id,
+                            class_name=class_name,
+                        )
+                    )
+
+            all_results.append(ImageResult(
+                image_path="array",
+                image_shape=image_shape,
+                detections=detections,
+                inference_time=per_image_time,
+                task_type=task_type,
+                probs=probs,
+                obb_boxes=obb_boxes,
+            ))
+
+        return all_results
+
+    def inference_batch(self, images: List[np.ndarray]) -> List[ImageResult]:
+        """Run batch inference on multiple images."""
+        if self.model_format == "onnx":
+            # ONNX doesn't support batch easily, fall back to sequential
+            results = []
+            for img in images:
+                results.append(self.inference_onnx(img))
+            return results
+        else:
+            return self.inference_batch_pytorch(images)
+
 
 def draw_detections(
     image: np.ndarray,
@@ -837,6 +1002,7 @@ Examples:
     )
     parser.add_argument("--imgsz", type=int, default=640, help="Input image size")
     parser.add_argument("--device", type=str, default="auto", help="Device: auto, cpu, cuda, 0, 0,1")
+    parser.add_argument("--batch", type=int, default=1, help="Batch size for inference")
 
     # Input/Output settings
     parser.add_argument("--input", "-i", type=str, default=None, help="Input image or directory")
@@ -892,6 +1058,7 @@ def main():
     model = model_cfg.get("path", args.model)
     imgsz = model_cfg.get("imgsz", args.imgsz)
     device = model_cfg.get("device", args.device)
+    batch_size = model_cfg.get("batch", args.batch)
     classes_filter = model_cfg.get("classes", args.classes)
 
     input_path = io_cfg.get("input", args.input)
@@ -925,6 +1092,7 @@ def main():
     print(f"Model: {model}")
     print(f"Device: {device}")
     print(f"Image size: {imgsz}")
+    print(f"Batch size: {batch_size}")
     print(f"NMS Config:")
     print(f"  - Confidence threshold: {nms_config.conf_threshold}")
     print(f"  - IoU threshold: {nms_config.iou_threshold}")
@@ -939,6 +1107,7 @@ def main():
         device=device,
         imgsz=imgsz,
         classes=classes_filter,
+        batch_size=batch_size,
     )
 
     # Get input files
@@ -952,32 +1121,19 @@ def main():
         print("No images found!")
         return
 
-    # Process images
+    # Process images in batches
     all_results = []
     total_detections = 0
     total_time = 0.0
     detected_task_type = None
 
-    for i, image_file in enumerate(image_files):
-        # Read image
-        image = cv2.imread(str(image_file))
-        if image is None:
-            print(f"Warning: Failed to load {image_file}")
-            continue
-
-        # Run inference
-        result = engine(image)
-        all_results.append(result)
-        total_detections += len(result.detections)
-        total_time += result.inference_time
+    def save_single_result(result, image_file, image):
+        """Save results for a single image."""
+        nonlocal detected_task_type
 
         # Detect task type from first result
         if detected_task_type is None:
             detected_task_type = result.task_type
-
-        if verbose:
-            task_info = f"[{result.task_type}]" if result.task_type != "detect" else ""
-            print(f"[{i+1}/{len(image_files)}] {image_file.name}: {len(result.detections)} detections {task_info}, {result.inference_time*1000:.2f}ms")
 
         # Calculate relative path for output
         if input_path.is_file():
@@ -1015,42 +1171,10 @@ def main():
                 crop_path = crop_dir / f"{det.class_name}_{j}.jpg"
                 cv2.imwrite(str(crop_path), crop)
 
-    # Save JSON results
-    if save_json:
-        json_path = output_path / "results.json"
-        json_path.parent.mkdir(parents=True, exist_ok=True)
-
-        json_data = {
-            "model": model,
-            "nms_config": {
-                "conf_threshold": nms_config.conf_threshold,
-                "iou_threshold": nms_config.iou_threshold,
-                "max_detections": nms_config.max_detections,
-                "agnostic": nms_config.agnostic,
-            },
-            "total_images": len(image_files),
-            "total_detections": total_detections,
-            "results": [r.to_dict() for r in all_results],
-        }
-
-        with open(json_path, "w", encoding="utf-8") as f:
-            json.dump(json_data, f, indent=2, ensure_ascii=False)
-
-        print(f"Results saved to: {json_path}")
-
-    # Save txt results
-    if save_txt:
-        txt_dir = output_path / "labels"
-        txt_dir.mkdir(parents=True, exist_ok=True)
-
-        for result in all_results:
-            if input_path.is_file():
-                txt_name = Path(result.image_path).stem + ".txt"
-            else:
-                rel_path = Path(result.image_path).relative_to(input_path)
-                txt_name = str(rel_path.with_suffix(".txt"))
-
-            txt_path = txt_dir / txt_name
+        # Save txt label (real-time)
+        if save_txt:
+            txt_dir = output_path / "labels"
+            txt_path = txt_dir / str(rel_path.with_suffix(".txt"))
             txt_path.parent.mkdir(parents=True, exist_ok=True)
 
             img_h, img_w = result.image_shape
@@ -1123,7 +1247,68 @@ def main():
 
                         f.write(f"{det.class_id} {cx:.6f} {cy:.6f} {w:.6f} {h:.6f} {det.confidence:.4f}\n")
 
-        print(f"Labels saved to: {txt_dir}")
+    # Batch processing
+    num_batches = (len(image_files) + batch_size - 1) // batch_size
+
+    for batch_idx in range(num_batches):
+        start_idx = batch_idx * batch_size
+        end_idx = min(start_idx + batch_size, len(image_files))
+        batch_files = image_files[start_idx:end_idx]
+
+        # Read batch images
+        batch_images = []
+        valid_files = []
+        for image_file in batch_files:
+            image = cv2.imread(str(image_file))
+            if image is None:
+                print(f"Warning: Failed to load {image_file}")
+                continue
+            batch_images.append(image)
+            valid_files.append(image_file)
+
+        if not batch_images:
+            continue
+
+        # Run batch inference
+        start_time = time.perf_counter()
+        batch_results = engine.inference_batch(batch_images)
+        batch_time = time.perf_counter() - start_time
+
+        # Process and save results
+        for result, image_file, image in zip(batch_results, valid_files, batch_images):
+            result.image_path = str(image_file)
+            all_results.append(result)
+            total_detections += len(result.detections)
+            total_time += result.inference_time
+
+            if verbose:
+                task_info = f"[{result.task_type}]" if result.task_type != "detect" else ""
+                print(f"[{start_idx + len(valid_files)}/{len(image_files)}] {image_file.name}: {len(result.detections)} detections {task_info}, {result.inference_time*1000:.2f}ms")
+
+            save_single_result(result, image_file, image)
+
+    # Save JSON results
+    if save_json:
+        json_path = output_path / "results.json"
+        json_path.parent.mkdir(parents=True, exist_ok=True)
+
+        json_data = {
+            "model": model,
+            "nms_config": {
+                "conf_threshold": nms_config.conf_threshold,
+                "iou_threshold": nms_config.iou_threshold,
+                "max_detections": nms_config.max_detections,
+                "agnostic": nms_config.agnostic,
+            },
+            "total_images": len(image_files),
+            "total_detections": total_detections,
+            "results": [r.to_dict() for r in all_results],
+        }
+
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(json_data, f, indent=2, ensure_ascii=False)
+
+        print(f"Results saved to: {json_path}")
 
     # Print summary
     print(f"\n{'='*60}")

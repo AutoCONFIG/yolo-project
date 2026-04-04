@@ -101,13 +101,21 @@ def patch_ultralytics_downloads():
     Call this at the start of your script to ensure downloads go to weights_dir.
     """
     import ultralytics.utils.downloads as dl_module
+
+    # Check if already patched
+    if getattr(dl_module, '_weights_dir_patched', False):
+        return
+
     dl_module.attempt_download_asset = attempt_download_asset
 
     # Also patch the import in nn/tasks.py
     import ultralytics.nn.tasks as tasks_module
     tasks_module.attempt_download_asset = attempt_download_asset
 
-    LOGGER.info(f"✅ Patched ultralytics downloads to use weights_dir: {WEIGHTS_DIR}")
+    # Mark as patched
+    dl_module._weights_dir_patched = True
+
+    LOGGER.info(f"Patched ultralytics downloads to use weights_dir: {WEIGHTS_DIR}")
 
 
 # Auto-patch when this module is imported

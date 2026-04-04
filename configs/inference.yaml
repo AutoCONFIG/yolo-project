@@ -4,10 +4,11 @@
 
 # Model settings
 model:
-  path: yolo12x-seg.pt  # Model path (.pt or .onnx)
+  path: yolo26x-seg.pt  # Model path (.pt or .onnx)
   format: auto     # auto, pytorch, onnx
   imgsz: 640       # Input image size
   device: auto     # auto, cpu, cuda, 0, 0,1
+  batch: 51        # Batch size for inference (larger = faster, more VRAM)
   classes: [0]     # Only keep specified classes (null = all). COCO: person=0, car=2, etc.
 
 # Input/Output settings
@@ -21,11 +22,11 @@ io:
 
 # NMS (Non-Maximum Suppression) settings
 nms:
-  conf: 0.35        # Confidence threshold
-  iou: 0.4          # NMS IoU threshold
+  conf: 0.10        # Confidence threshold
+  iou: 0.10          # NMS IoU threshold
   max_det: 30      # Maximum detections per image
   agnostic: true   # Class-agnostic NMS
-  multi_label: true # Allow multiple labels per box
+  multi_label: false # Allow multiple labels per box
 
 # Visualization settings
 visualization:
