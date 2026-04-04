@@ -1,2 +1,4 @@
-# Claude Code
 .claude/
+runs/
+weights/
+__pycache__/

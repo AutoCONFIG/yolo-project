@@ -30,6 +30,10 @@ ULTRALYTICS_PATH = Path(__file__).parent / "ultralytics"
 if ULTRALYTICS_PATH.exists():
     sys.path.insert(0, str(ULTRALYTICS_PATH))
 
+# Patch ultralytics downloads to use weights_dir (must be before ultralytics imports)
+from utils.downloads import patch_ultralytics_downloads
+patch_ultralytics_downloads()
+
 from ultralytics import YOLO
 
 

@@ -8,6 +8,7 @@ Supports:
 - Preserves subdirectory structure in output
 - Configurable NMS post-processing parameters
 - Both PyTorch and ONNX model formats
+- Automatic task type detection (detect/segment/classify/pose/obb)
 
 Usage:
     # PyTorch model inference
@@ -36,6 +37,10 @@ ULTRALYTICS_PATH = Path(__file__).parent / "ultralytics"
 if ULTRALYTICS_PATH.exists():
     sys.path.insert(0, str(ULTRALYTICS_PATH))
 
+# Patch ultralytics downloads to use weights_dir (must be before ultralytics imports)
+from utils.downloads import patch_ultralytics_downloads
+patch_ultralytics_downloads()
+
 import yaml
 
 
@@ -47,6 +52,8 @@ class DetectionResult:
     confidence: float
     class_id: int
     class_name: str
+    mask: Optional[np.ndarray] = None  # Segmentation mask (binary)
+    keypoints: Optional[List[List[float]]] = None  # Pose keypoints [(x, y, conf), ...]
 
 
 @dataclass
@@ -57,14 +64,27 @@ class ImageResult:
     image_shape: Tuple[int, int]  # (height, width)
     detections: List[DetectionResult] = field(default_factory=list)
     inference_time: float = 0.0
+    task_type: str = "detect"  # detect, segment, classify, pose, obb
+    probs: Optional[List[Tuple[str, float]]] = None  # Classification results [(class_name, prob), ...]
+    obb_boxes: Optional[List[Dict]] = None  # OBB results
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        result = {
             "image_path": self.image_path,
             "image_shape": list(self.image_shape),
             "inference_time_ms": round(self.inference_time * 1000, 2),
-            "num_detections": len(self.detections),
-            "detections": [
+            "task_type": self.task_type,
+        }
+
+        if self.task_type == "classify" and self.probs:
+            result["num_detections"] = len(self.probs)
+            result["classifications"] = [
+                {"class_name": name, "probability": round(prob, 4)}
+                for name, prob in self.probs
+            ]
+        else:
+            result["num_detections"] = len(self.detections)
+            result["detections"] = [
                 {
                     "bbox": d.bbox,
                     "confidence": round(d.confidence, 4),
@@ -72,8 +92,12 @@ class ImageResult:
                     "class_name": d.class_name,
                 }
                 for d in self.detections
-            ],
-        }
+            ]
+
+        if self.task_type == "obb" and self.obb_boxes:
+            result["obb"] = self.obb_boxes
+
+        return result
 
 
 class NMSConfig:
@@ -103,11 +127,13 @@ class YOLOInference:
         nms_config: Optional[NMSConfig] = None,
         device: str = "auto",
         imgsz: int = 640,
+        classes: Optional[List[int]] = None,
     ):
         self.model_path = Path(model_path)
         self.nms_config = nms_config or NMSConfig()
         self.device = device
         self.imgsz = imgsz
+        self.classes_filter = classes
 
         # Detect model format
         self.model_format = self._detect_format()
@@ -412,7 +438,28 @@ class YOLOInference:
 
         return detections
 
-    def inference_pytorch(self, image: np.ndarray) -> List[DetectionResult]:
+    def _detect_task_type(self) -> str:
+        """Detect task type from model."""
+        if self.model_format == "onnx":
+            return "detect"  # Default for ONNX
+
+        # Check model type from ultralytics
+        if hasattr(self.model, "task"):
+            return self.model.task
+
+        # Fallback: check model name
+        model_name = str(self.model_path).lower()
+        if "-seg" in model_name:
+            return "segment"
+        elif "-cls" in model_name:
+            return "classify"
+        elif "-pose" in model_name:
+            return "pose"
+        elif "-obb" in model_name:
+            return "obb"
+        return "detect"
+
+    def inference_pytorch(self, image: np.ndarray) -> ImageResult:
         """Run inference with PyTorch model."""
         results = self.model.predict(
             image,
@@ -421,20 +468,90 @@ class YOLOInference:
             iou=self.nms_config.iou_threshold,
             max_det=self.nms_config.max_detections,
             agnostic_nms=self.nms_config.agnostic,
+            classes=self.classes_filter,
             verbose=False,
         )
 
+        image_shape = image.shape[:2]
+        task_type = self._detect_task_type()
+
         detections = []
+        probs = None
+        obb_boxes = None
+
         if results and len(results) > 0:
             result = results[0]
-            boxes = result.boxes
 
-            if boxes is not None:
+            # Handle classification task
+            if result.probs is not None:
+                task_type = "classify"
+                probs = []
+                for idx in result.probs.top5:
+                    class_name = self.classes.get(idx, f"class_{idx}")
+                    prob = float(result.probs.data[idx])
+                    probs.append((class_name, prob))
+
+            # Handle OBB task
+            elif result.obb is not None:
+                task_type = "obb"
+                obb_boxes = []
+                for i in range(len(result.obb)):
+                    box = result.obb[i]
+                    xyxyxyxy = box.xyxyxyxy.squeeze().cpu().numpy()  # 8 points
+                    conf = float(box.conf.cpu().numpy())
+                    class_id = int(box.cls.cpu().numpy())
+                    class_name = self.classes.get(class_id, f"class_{class_id}")
+
+                    # Also add as detection for compatibility
+                    detections.append(
+                        DetectionResult(
+                            bbox=box.xyxy.squeeze().cpu().numpy().tolist(),
+                            confidence=conf,
+                            class_id=class_id,
+                            class_name=class_name,
+                        )
+                    )
+                    obb_boxes.append({
+                        "points": xyxyxyxy.tolist(),
+                        "confidence": conf,
+                        "class_id": class_id,
+                        "class_name": class_name,
+                    })
+
+            # Handle detect/segment/pose tasks
+            elif result.boxes is not None:
+                boxes = result.boxes
+
                 for i in range(len(boxes)):
                     box = boxes.xyxy[i].cpu().numpy()
                     conf = float(boxes.conf[i].cpu().numpy())
                     class_id = int(boxes.cls[i].cpu().numpy())
                     class_name = self.classes.get(class_id, f"class_{class_id}")
+
+                    # Get mask if available
+                    mask = None
+                    if result.masks is not None:
+                        task_type = "segment"
+                        # Get binary mask in original image coordinates
+                        mask_data = result.masks.data[i].cpu().numpy()
+                        # Scale mask to original image size
+                        mask = cv2.resize(
+                            mask_data.astype(np.uint8),
+                            (image_shape[1], image_shape[0]),
+                            interpolation=cv2.INTER_NEAREST
+                        )
+
+                    # Get keypoints if available
+                    keypoints = None
+                    if result.keypoints is not None:
+                        task_type = "pose"
+                        kpt_data = result.keypoints.data[i].cpu().numpy()
+                        if kpt_data.shape[-1] == 3:
+                            # (x, y, conf) format
+                            keypoints = kpt_data.tolist()
+                        else:
+                            # (x, y) format
+                            keypoints = kpt_data.tolist()
 
                     detections.append(
                         DetectionResult(
@@ -442,12 +559,21 @@ class YOLOInference:
                             confidence=conf,
                             class_id=class_id,
                             class_name=class_name,
+                            mask=mask,
+                            keypoints=keypoints,
                         )
                     )
 
-        return detections
+        return ImageResult(
+            image_path="array",
+            image_shape=image_shape,
+            detections=detections,
+            task_type=task_type,
+            probs=probs,
+            obb_boxes=obb_boxes,
+        )
 
-    def inference_onnx(self, image: np.ndarray) -> List[DetectionResult]:
+    def inference_onnx(self, image: np.ndarray) -> ImageResult:
         """Run inference with ONNX model."""
         # Preprocess
         img_data, pad, r = self.preprocess_onnx(image)
@@ -460,7 +586,12 @@ class YOLOInference:
         orig_shape = image.shape[:2]
         detections = self.postprocess_onnx(outputs, orig_shape, pad, r)
 
-        return detections
+        return ImageResult(
+            image_path="array",
+            image_shape=orig_shape,
+            detections=detections,
+            task_type="detect",  # ONNX doesn't easily support task detection
+        )
 
     def __call__(self, image: Union[str, np.ndarray]) -> ImageResult:
         """Run inference on a single image."""
@@ -479,18 +610,14 @@ class YOLOInference:
         start_time = time.perf_counter()
 
         if self.model_format == "onnx":
-            detections = self.inference_onnx(image)
+            result = self.inference_onnx(image)
         else:
-            detections = self.inference_pytorch(image)
+            result = self.inference_pytorch(image)
 
-        inference_time = time.perf_counter() - start_time
+        result.image_path = image_path
+        result.inference_time = time.perf_counter() - start_time
 
-        return ImageResult(
-            image_path=image_path,
-            image_shape=image_shape,
-            detections=detections,
-            inference_time=inference_time,
-        )
+        return result
 
 
 def draw_detections(
@@ -501,24 +628,125 @@ def draw_detections(
     font_scale: float = 0.5,
     show_labels: bool = True,
     show_conf: bool = True,
+    mask_alpha: float = 0.4,
+    kpt_radius: int = 5,
+    kpt_line: bool = True,
 ) -> np.ndarray:
-    """Draw detection results on image."""
+    """Draw detection results on image based on task type.
+
+    Supports:
+    - detect: Bounding boxes
+    - segment: Masks + bounding boxes
+    - classify: Class probabilities text
+    - pose: Keypoints + bounding boxes
+    - obb: Oriented bounding boxes
+    """
     output = image.copy()
 
     # Generate color palette
     np.random.seed(42)
-    colors = np.random.randint(0, 255, size=(len(classes), 3), dtype=np.uint8)
+    colors = np.random.randint(0, 255, size=(len(classes) + 10, 3), dtype=np.uint8)
+
+    # Handle classification task
+    if result.task_type == "classify" and result.probs is not None:
+        # Draw classification results as text
+        y_offset = 30
+        for class_name, prob in result.probs:
+            text = f"{class_name}: {prob:.2f}"
+            color = tuple(int(c) for c in colors[hash(class_name) % len(colors)])
+
+            # Draw background rectangle
+            (text_width, text_height), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, font_scale * 1.2, 2)
+            cv2.rectangle(output, (10, y_offset - text_height - 5), (10 + text_width + 10, y_offset + 5), color, -1)
+
+            # Draw text
+            cv2.putText(output, text, (15, y_offset), cv2.FONT_HERSHEY_SIMPLEX, font_scale * 1.2, (255, 255, 255), 2, cv2.LINE_AA)
+            y_offset += text_height + 15
+
+        return output
+
+    # Handle OBB task
+    if result.task_type == "obb" and result.obb_boxes is not None:
+        for obb in result.obb_boxes:
+            points = np.array(obb["points"], dtype=np.int32).reshape((-1, 1, 2))
+            class_id = obb["class_id"]
+            color = tuple(int(c) for c in colors[class_id % len(colors)])
+
+            # Draw rotated bounding box
+            cv2.polylines(output, [points], isClosed=True, color=color, thickness=box_thickness)
+
+            # Draw label
+            if show_labels:
+                label = obb["class_name"]
+                if show_conf:
+                    label += f" {obb['confidence']:.2f}"
+
+                # Get centroid for label position
+                cx = int(np.mean(points[:, 0, 0]))
+                cy = int(np.mean(points[:, 0, 1]))
+
+                (text_width, text_height), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, 1)
+                cv2.rectangle(output, (cx - text_width // 2 - 2, cy - text_height - 8),
+                             (cx + text_width // 2 + 2, cy - 3), color, -1)
+                cv2.putText(output, label, (cx - text_width // 2, cy - 5),
+                           cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255, 255, 255), 1, cv2.LINE_AA)
+
+        return output
+
+    # Create overlay for masks
+    overlay = output.copy()
 
     for det in result.detections:
         x1, y1, x2, y2 = [int(v) for v in det.bbox]
         class_id = det.class_id
         color = tuple(int(c) for c in colors[class_id % len(colors)])
 
-        # Draw box
-        cv2.rectangle(output, (x1, y1), (x2, y2), color, box_thickness)
+        # Draw segmentation mask
+        if det.mask is not None:
+            mask = det.mask.astype(bool)
+            # Fill mask with color
+            output[mask] = output[mask] * (1 - mask_alpha) + np.array(color) * mask_alpha
+            # Draw mask contour
+            contours, _ = cv2.findContours(det.mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            cv2.drawContours(output, contours, -1, color, box_thickness)
 
-        # Draw label
-        if show_labels:
+        # Draw bounding box (skip if mask already drew contour)
+        if det.mask is None:
+            cv2.rectangle(output, (x1, y1), (x2, y2), color, box_thickness)
+
+        # Draw pose keypoints
+        if det.keypoints is not None:
+            kpts = np.array(det.keypoints)
+
+            # Draw skeleton lines if we have enough keypoints
+            if kpt_line and len(kpts) >= 17:
+                # COCO skeleton connections
+                skeleton = [
+                    (0, 1), (0, 2), (1, 3), (2, 4),  # Head
+                    (5, 6), (5, 7), (7, 9), (6, 8), (8, 10),  # Arms
+                    (5, 11), (6, 12), (11, 12),  # Torso
+                    (11, 13), (13, 15), (12, 14), (14, 16)  # Legs
+                ]
+                for i, j in skeleton:
+                    if i < len(kpts) and j < len(kpts):
+                        pt1 = (int(kpts[i][0]), int(kpts[i][1]))
+                        pt2 = (int(kpts[j][0]), int(kpts[j][1]))
+                        # Check visibility if available
+                        visible1 = kpts[i][2] > 0.5 if len(kpts[i]) > 2 else True
+                        visible2 = kpts[j][2] > 0.5 if len(kpts[j]) > 2 else True
+                        if visible1 and visible2:
+                            cv2.line(output, pt1, pt2, color, max(1, box_thickness - 1))
+
+            # Draw keypoint circles
+            for kpt in kpts:
+                x, y = int(kpt[0]), int(kpt[1])
+                visible = kpt[2] > 0.5 if len(kpt) > 2 else True
+                if visible:
+                    cv2.circle(output, (x, y), kpt_radius, color, -1)
+                    cv2.circle(output, (x, y), kpt_radius, (255, 255, 255), 1)
+
+        # Draw label (skip for pose when keypoints are drawn)
+        if show_labels and det.keypoints is None:
             label = det.class_name
             if show_conf:
                 label += f" {det.confidence:.2f}"
@@ -598,7 +826,7 @@ Examples:
     )
 
     # Model settings
-    parser.add_argument("--model", "-m", type=str, required=True, help="Model path (.pt or .onnx)")
+    parser.add_argument("--model", "-m", type=str, default=None, help="Model path (.pt or .onnx)")
     parser.add_argument(
         "--format",
         "-f",
@@ -611,7 +839,7 @@ Examples:
     parser.add_argument("--device", type=str, default="auto", help="Device: auto, cpu, cuda, 0, 0,1")
 
     # Input/Output settings
-    parser.add_argument("--input", "-i", type=str, required=True, help="Input image or directory")
+    parser.add_argument("--input", "-i", type=str, default=None, help="Input image or directory")
     parser.add_argument("--output", "-o", type=str, default="runs/inference", help="Output directory")
     parser.add_argument(
         "--save-vis",
@@ -630,6 +858,7 @@ Examples:
     parser.add_argument("--max-det", type=int, default=300, help="Maximum detections per image")
     parser.add_argument("--agnostic-nms", action="store_true", help="Class-agnostic NMS")
     parser.add_argument("--multi-label", action="store_true", default=True, help="Multi-label detection")
+    parser.add_argument("--classes", type=int, nargs="+", help="只保留指定类别ID，如 --classes 0 1 2 (person=0, car=2)")
 
     # Visualization settings
     parser.add_argument("--box-thickness", type=int, default=2, help="Bounding box line thickness")
@@ -654,40 +883,67 @@ def main():
     if args.config:
         config = load_inference_config(args.config)
 
+    # Override args with config values (config takes precedence)
+    model_cfg = config.get("model", {})
+    io_cfg = config.get("io", {})
+    nms_cfg = config.get("nms", {})
+    vis_cfg = config.get("visualization", {})
+
+    model = model_cfg.get("path", args.model)
+    imgsz = model_cfg.get("imgsz", args.imgsz)
+    device = model_cfg.get("device", args.device)
+    classes_filter = model_cfg.get("classes", args.classes)
+
+    input_path = io_cfg.get("input", args.input)
+    output_path = io_cfg.get("output", args.output)
+    save_vis = io_cfg.get("save_vis", args.save_vis)
+    save_json = io_cfg.get("save_json", args.save_json)
+    save_txt = io_cfg.get("save_txt", args.save_txt)
+    save_crop = io_cfg.get("save_crop", args.save_crop)
+
+    verbose = config.get("verbose", args.verbose)
+
+    # Validate required parameters
+    if not model:
+        raise ValueError("--model or config model.path is required")
+    if not input_path:
+        raise ValueError("--input or config io.input is required")
+
     # Create NMS config
     nms_config = NMSConfig(
-        conf_threshold=config.get("nms", {}).get("conf", args.conf),
-        iou_threshold=config.get("nms", {}).get("iou", args.iou),
-        max_detections=config.get("nms", {}).get("max_det", args.max_det),
-        agnostic=config.get("nms", {}).get("agnostic", args.agnostic_nms),
-        multi_label=config.get("nms", {}).get("multi_label", args.multi_label),
+        conf_threshold=nms_cfg.get("conf", args.conf),
+        iou_threshold=nms_cfg.get("iou", args.iou),
+        max_detections=nms_cfg.get("max_det", args.max_det),
+        agnostic=nms_cfg.get("agnostic", args.agnostic_nms),
+        multi_label=nms_cfg.get("multi_label", args.multi_label),
     )
 
     # Initialize inference engine
     print(f"\n{'='*60}")
     print("YOLO Inference")
     print(f"{'='*60}")
-    print(f"Model: {args.model}")
-    print(f"Format: {args.format}")
-    print(f"Device: {args.device}")
-    print(f"Image size: {args.imgsz}")
+    print(f"Model: {model}")
+    print(f"Device: {device}")
+    print(f"Image size: {imgsz}")
     print(f"NMS Config:")
     print(f"  - Confidence threshold: {nms_config.conf_threshold}")
     print(f"  - IoU threshold: {nms_config.iou_threshold}")
     print(f"  - Max detections: {nms_config.max_detections}")
     print(f"  - Class-agnostic: {nms_config.agnostic}")
+    print(f"  - Classes filter: {classes_filter if classes_filter else 'All'}")
     print(f"{'='*60}\n")
 
     engine = YOLOInference(
-        model_path=args.model,
+        model_path=model,
         nms_config=nms_config,
-        device=args.device,
-        imgsz=args.imgsz,
+        device=device,
+        imgsz=imgsz,
+        classes=classes_filter,
     )
 
     # Get input files
-    input_path = Path(args.input)
-    output_path = Path(args.output)
+    input_path = Path(input_path)
+    output_path = Path(output_path)
     image_files = get_image_files(input_path)
 
     print(f"Found {len(image_files)} images to process")
@@ -700,6 +956,7 @@ def main():
     all_results = []
     total_detections = 0
     total_time = 0.0
+    detected_task_type = None
 
     for i, image_file in enumerate(image_files):
         # Read image
@@ -714,8 +971,13 @@ def main():
         total_detections += len(result.detections)
         total_time += result.inference_time
 
-        if args.verbose:
-            print(f"[{i+1}/{len(image_files)}] {image_file.name}: {len(result.detections)} detections, {result.inference_time*1000:.2f}ms")
+        # Detect task type from first result
+        if detected_task_type is None:
+            detected_task_type = result.task_type
+
+        if verbose:
+            task_info = f"[{result.task_type}]" if result.task_type != "detect" else ""
+            print(f"[{i+1}/{len(image_files)}] {image_file.name}: {len(result.detections)} detections {task_info}, {result.inference_time*1000:.2f}ms")
 
         # Calculate relative path for output
         if input_path.is_file():
@@ -724,15 +986,15 @@ def main():
             rel_path = image_file.relative_to(input_path)
 
         # Save visualization
-        if args.save_vis:
+        if save_vis:
             vis_output = draw_detections(
                 image,
                 result,
                 engine.classes,
-                box_thickness=args.box_thickness,
-                font_scale=args.font_scale,
-                show_labels=args.show_labels,
-                show_conf=args.show_conf,
+                box_thickness=vis_cfg.get("box_thickness", args.box_thickness),
+                font_scale=vis_cfg.get("font_scale", args.font_scale),
+                show_labels=vis_cfg.get("show_labels", args.show_labels),
+                show_conf=vis_cfg.get("show_conf", args.show_conf),
             )
 
             vis_path = output_path / "vis" / rel_path
@@ -740,7 +1002,7 @@ def main():
             cv2.imwrite(str(vis_path), vis_output)
 
         # Save cropped detections
-        if args.save_crop and result.detections:
+        if save_crop and result.detections:
             crop_dir = output_path / "crops" / rel_path.stem
             crop_dir.mkdir(parents=True, exist_ok=True)
 
@@ -754,12 +1016,12 @@ def main():
                 cv2.imwrite(str(crop_path), crop)
 
     # Save JSON results
-    if args.save_json:
+    if save_json:
         json_path = output_path / "results.json"
         json_path.parent.mkdir(parents=True, exist_ok=True)
 
         json_data = {
-            "model": args.model,
+            "model": model,
             "nms_config": {
                 "conf_threshold": nms_config.conf_threshold,
                 "iou_threshold": nms_config.iou_threshold,
@@ -777,7 +1039,7 @@ def main():
         print(f"Results saved to: {json_path}")
 
     # Save txt results
-    if args.save_txt:
+    if save_txt:
         txt_dir = output_path / "labels"
         txt_dir.mkdir(parents=True, exist_ok=True)
 
@@ -794,15 +1056,72 @@ def main():
             img_h, img_w = result.image_shape
 
             with open(txt_path, "w") as f:
-                for det in result.detections:
-                    x1, y1, x2, y2 = det.bbox
-                    # Convert to YOLO format (center_x, center_y, width, height) normalized
-                    cx = (x1 + x2) / 2 / img_w
-                    cy = (y1 + y2) / 2 / img_h
-                    w = (x2 - x1) / img_w
-                    h = (y2 - y1) / img_h
+                # Handle classification results
+                if result.task_type == "classify" and result.probs:
+                    for class_name, prob in result.probs:
+                        f.write(f"{class_name} {prob:.4f}\n")
 
-                    f.write(f"{det.class_id} {cx:.6f} {cy:.6f} {w:.6f} {h:.6f} {det.confidence:.4f}\n")
+                # Handle OBB results
+                elif result.task_type == "obb" and result.obb_boxes:
+                    for obb in result.obb_boxes:
+                        # Write OBB in YOLO format: class x1 y1 x2 y2 x3 y3 x4 y4 conf
+                        points = obb["points"]
+                        line = f"{obb['class_id']}"
+                        for pt in points:
+                            line += f" {pt[0]/img_w:.6f} {pt[1]/img_h:.6f}"
+                        line += f" {obb['confidence']:.4f}\n"
+                        f.write(line)
+
+                # Handle detect/segment/pose results
+                else:
+                    for det in result.detections:
+                        x1, y1, x2, y2 = det.bbox
+
+                        # Write segmentation mask if available
+                        if det.mask is not None:
+                            # Convert mask to polygon points
+                            contours, _ = cv2.findContours(
+                                det.mask.astype(np.uint8),
+                                cv2.RETR_EXTERNAL,
+                                cv2.CHAIN_APPROX_SIMPLE
+                            )
+                            if contours:
+                                # Use largest contour
+                                contour = max(contours, key=cv2.contourArea)
+                                # Normalize coordinates
+                                points = contour.squeeze()
+                                if len(points.shape) == 1:
+                                    points = points.reshape(1, 2)
+                                points_str = " ".join(f"{p[0]/img_w:.6f} {p[1]/img_h:.6f}" for p in points)
+                                f.write(f"{det.class_id} {points_str} {det.confidence:.4f}\n")
+                            continue
+
+                        # Write keypoints if available
+                        if det.keypoints is not None:
+                            kpts = det.keypoints
+                            # YOLO pose format: class cx cy w h kp1_x kp1_y kp1_v kp2_x kp2_y kp2_v ... conf
+                            cx = (x1 + x2) / 2 / img_w
+                            cy = (y1 + y2) / 2 / img_h
+                            w = (x2 - x1) / img_w
+                            h = (y2 - y1) / img_h
+
+                            kpts_str = ""
+                            for kpt in kpts:
+                                if len(kpt) >= 3:
+                                    kpts_str += f" {kpt[0]/img_w:.6f} {kpt[1]/img_h:.6f} {kpt[2]:.4f}"
+                                else:
+                                    kpts_str += f" {kpt[0]/img_w:.6f} {kpt[1]/img_h:.6f} 1.0"
+
+                            f.write(f"{det.class_id} {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}{kpts_str} {det.confidence:.4f}\n")
+                            continue
+
+                        # Standard detection format
+                        cx = (x1 + x2) / 2 / img_w
+                        cy = (y1 + y2) / 2 / img_h
+                        w = (x2 - x1) / img_w
+                        h = (y2 - y1) / img_h
+
+                        f.write(f"{det.class_id} {cx:.6f} {cy:.6f} {w:.6f} {h:.6f} {det.confidence:.4f}\n")
 
         print(f"Labels saved to: {txt_dir}")
 
@@ -811,6 +1130,7 @@ def main():
     print("Inference Summary")
     print(f"{'='*60}")
     print(f"Total images:    {len(image_files)}")
+    print(f"Task type:       {detected_task_type or 'detect'}")
     print(f"Total detections: {total_detections}")
     print(f"Total time:      {total_time:.2f}s")
     print(f"Average time:    {total_time/len(image_files)*1000:.2f}ms per image")
