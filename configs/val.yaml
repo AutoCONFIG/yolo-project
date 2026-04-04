@@ -1,0 +1,29 @@
+# YOLO Validation Configuration
+# ==============================
+# Validation mode configuration file
+
+mode: val
+
+# Model settings
+model:
+  name: yolo26n.pt  # Or path to trained model: runs/detect/train/weights/best.pt
+
+# Data settings
+data:
+  config: coco8.yaml
+  split: val  # val, test, train
+
+# Validation settings
+train:
+  imgsz: 640
+  batch: 16
+  device: null  # auto
+
+validation:
+  conf: 0.25
+  iou: 0.7
+  plots: true
+  save_json: false
+
+output:
+  verbose: true

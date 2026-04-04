@@ -1,0 +1,37 @@
+# YOLO Inference Configuration
+# =============================
+# Configuration for batch inference
+
+# Model settings
+model:
+  path: runs/detect/train/weights/best.pt  # Model path (.pt or .onnx)
+  format: auto     # auto, pytorch, onnx
+  imgsz: 640       # Input image size
+  device: auto     # auto, cpu, cuda, 0, 0,1
+
+# Input/Output settings
+io:
+  input: images/           # Input image or directory
+  output: runs/inference   # Output directory
+  save_vis: true           # Save visualization images
+  save_json: false         # Save detection results as JSON
+  save_txt: false          # Save YOLO format txt labels
+  save_crop: false         # Save cropped detection images
+
+# NMS (Non-Maximum Suppression) settings
+nms:
+  conf: 0.25        # Confidence threshold
+  iou: 0.7          # NMS IoU threshold
+  max_det: 300      # Maximum detections per image
+  agnostic: false   # Class-agnostic NMS
+  multi_label: true # Allow multiple labels per box
+
+# Visualization settings
+visualization:
+  box_thickness: 2  # Bounding box line thickness
+  font_scale: 0.5   # Font scale for labels
+  show_labels: true # Show class labels
+  show_conf: true   # Show confidence scores
+
+# Other settings
+verbose: true

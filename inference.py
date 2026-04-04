@@ -1,0 +1,822 @@
+"""
+YOLO Inference Script
+=====================
+Batch inference script for YOLO models (PyTorch .pt and ONNX formats).
+
+Supports:
+- Single image or batch inference on directories
+- Preserves subdirectory structure in output
+- Configurable NMS post-processing parameters
+- Both PyTorch and ONNX model formats
+
+Usage:
+    # PyTorch model inference
+    python inference.py --model runs/detect/train/weights/best.pt --input images/ --output results/
+
+    # ONNX model inference
+    python inference.py --model model.onnx --input images/ --output results/ --format onnx
+
+    # With custom NMS parameters
+    python inference.py --model best.pt --input images/ --conf 0.5 --iou 0.45 --max-det 100
+"""
+
+import argparse
+import json
+import sys
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+import cv2
+import numpy as np
+
+# Add ultralytics submodule to path
+ULTRALYTICS_PATH = Path(__file__).parent / "ultralytics"
+if ULTRALYTICS_PATH.exists():
+    sys.path.insert(0, str(ULTRALYTICS_PATH))
+
+import yaml
+
+
+@dataclass
+class DetectionResult:
+    """Single detection result."""
+
+    bbox: List[float]  # [x1, y1, x2, y2] or [x, y, w, h]
+    confidence: float
+    class_id: int
+    class_name: str
+
+
+@dataclass
+class ImageResult:
+    """Results for a single image."""
+
+    image_path: str
+    image_shape: Tuple[int, int]  # (height, width)
+    detections: List[DetectionResult] = field(default_factory=list)
+    inference_time: float = 0.0
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "image_path": self.image_path,
+            "image_shape": list(self.image_shape),
+            "inference_time_ms": round(self.inference_time * 1000, 2),
+            "num_detections": len(self.detections),
+            "detections": [
+                {
+                    "bbox": d.bbox,
+                    "confidence": round(d.confidence, 4),
+                    "class_id": d.class_id,
+                    "class_name": d.class_name,
+                }
+                for d in self.detections
+            ],
+        }
+
+
+class NMSConfig:
+    """NMS (Non-Maximum Suppression) configuration."""
+
+    def __init__(
+        self,
+        conf_threshold: float = 0.25,
+        iou_threshold: float = 0.7,
+        max_detections: int = 300,
+        agnostic: bool = False,
+        multi_label: bool = True,
+    ):
+        self.conf_threshold = conf_threshold
+        self.iou_threshold = iou_threshold
+        self.max_detections = max_detections
+        self.agnostic = agnostic  # Class-agnostic NMS
+        self.multi_label = multi_label  # Allow multiple labels per box
+
+
+class YOLOInference:
+    """YOLO inference engine supporting both PyTorch and ONNX models."""
+
+    def __init__(
+        self,
+        model_path: str,
+        nms_config: Optional[NMSConfig] = None,
+        device: str = "auto",
+        imgsz: int = 640,
+    ):
+        self.model_path = Path(model_path)
+        self.nms_config = nms_config or NMSConfig()
+        self.device = device
+        self.imgsz = imgsz
+
+        # Detect model format
+        self.model_format = self._detect_format()
+
+        # Load model
+        self.model = None
+        self.ort_session = None
+        self.classes: Dict[int, str] = {}
+        self._load_model()
+
+    def _detect_format(self) -> str:
+        """Detect model format from file extension."""
+        suffix = self.model_path.suffix.lower()
+        if suffix == ".onnx":
+            return "onnx"
+        elif suffix == ".pt":
+            return "pytorch"
+        elif suffix in [".torchscript", ".engine", ".tflite"]:
+            return suffix[1:]
+        else:
+            # Default to pytorch
+            return "pytorch"
+
+    def _load_model(self):
+        """Load model based on format."""
+        if self.model_format == "onnx":
+            self._load_onnx_model()
+        else:
+            self._load_pytorch_model()
+
+    def _load_pytorch_model(self):
+        """Load PyTorch model using ultralytics."""
+        from ultralytics import YOLO
+
+        self.model = YOLO(str(self.model_path))
+
+        # Get class names
+        self.classes = self.model.names
+
+        # Set device
+        if self.device != "auto":
+            self.model.to(self.device)
+
+    def _load_onnx_model(self):
+        """Load ONNX model using onnxruntime."""
+        try:
+            import onnxruntime as ort
+        except ImportError:
+            raise ImportError("onnxruntime is required for ONNX inference. Install with: pip install onnxruntime or onnxruntime-gpu")
+
+        # Select providers based on device
+        available = ort.get_available_providers()
+        if self.device == "cuda" or (self.device == "auto" and "CUDAExecutionProvider" in available):
+            providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+        else:
+            providers = ["CPUExecutionProvider"]
+
+        self.ort_session = ort.InferenceSession(str(self.model_path), providers=providers)
+
+        # Get input shape
+        model_inputs = self.ort_session.get_inputs()
+        input_shape = model_inputs[0].shape
+        self.input_height = input_shape[2]
+        self.input_width = input_shape[3]
+
+        # Try to load class names from metadata or use COCO classes
+        self._load_onnx_classes()
+
+    def _load_onnx_classes(self):
+        """Load class names for ONNX model."""
+        # Try to get from model metadata
+        if self.ort_session:
+            metadata = self.ort_session.get_modelmeta()
+            if metadata and "names" in metadata.custom_metadata_map:
+                try:
+                    names = json.loads(metadata.custom_metadata_map["names"])
+                    self.classes = {int(k): v for k, v in names.items()}
+                    return
+                except (json.JSONDecodeError, ValueError):
+                    pass
+
+        # Default to COCO classes
+        self.classes = {
+            0: "person",
+            1: "bicycle",
+            2: "car",
+            3: "motorcycle",
+            4: "airplane",
+            5: "bus",
+            6: "train",
+            7: "truck",
+            8: "boat",
+            9: "traffic light",
+            10: "fire hydrant",
+            11: "stop sign",
+            12: "parking meter",
+            13: "bench",
+            14: "bird",
+            15: "cat",
+            16: "dog",
+            17: "horse",
+            18: "sheep",
+            19: "cow",
+            20: "elephant",
+            21: "bear",
+            22: "zebra",
+            23: "giraffe",
+            24: "backpack",
+            25: "umbrella",
+            26: "handbag",
+            27: "tie",
+            28: "suitcase",
+            29: "frisbee",
+            30: "skis",
+            31: "snowboard",
+            32: "sports ball",
+            33: "kite",
+            34: "baseball bat",
+            35: "baseball glove",
+            36: "skateboard",
+            37: "surfboard",
+            38: "tennis racket",
+            39: "bottle",
+            40: "wine glass",
+            41: "cup",
+            42: "fork",
+            43: "knife",
+            44: "spoon",
+            45: "bowl",
+            46: "banana",
+            47: "apple",
+            48: "sandwich",
+            49: "orange",
+            50: "broccoli",
+            51: "carrot",
+            52: "hot dog",
+            53: "pizza",
+            54: "donut",
+            55: "cake",
+            56: "chair",
+            57: "couch",
+            58: "potted plant",
+            59: "bed",
+            60: "dining table",
+            61: "toilet",
+            62: "tv",
+            63: "laptop",
+            64: "mouse",
+            65: "remote",
+            66: "keyboard",
+            67: "cell phone",
+            68: "microwave",
+            69: "oven",
+            70: "toaster",
+            71: "sink",
+            72: "refrigerator",
+            73: "book",
+            74: "clock",
+            75: "vase",
+            76: "scissors",
+            77: "teddy bear",
+            78: "hair drier",
+            79: "toothbrush",
+        }
+
+    def letterbox(
+        self, img: np.ndarray, new_shape: Tuple[int, int] = (640, 640)
+    ) -> Tuple[np.ndarray, Tuple[int, int], float]:
+        """Resize image with letterbox padding."""
+        shape = img.shape[:2]  # current shape [height, width]
+
+        # Scale ratio (new / old)
+        r = min(new_shape[0] / shape[0], new_shape[1] / shape[1])
+
+        # Compute new unpadded shape
+        new_unpad = round(shape[1] * r), round(shape[0] * r)
+
+        # Compute padding
+        dw, dh = (new_shape[1] - new_unpad[0]) / 2, (new_shape[0] - new_unpad[1]) / 2
+
+        if shape[::-1] != new_unpad:
+            img = cv2.resize(img, new_unpad, interpolation=cv2.INTER_LINEAR)
+
+        top, bottom = round(dh - 0.1), round(dh + 0.1)
+        left, right = round(dw - 0.1), round(dw + 0.1)
+        img = cv2.copyMakeBorder(img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=(114, 114, 114))
+
+        return img, (top, left), r
+
+    def preprocess_onnx(self, img: np.ndarray) -> Tuple[np.ndarray, Tuple[int, int], float]:
+        """Preprocess image for ONNX inference."""
+        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img_letterbox, pad, r = self.letterbox(img_rgb, (self.input_height, self.input_width))
+
+        # Normalize and transpose
+        img_data = img_letterbox.astype(np.float32) / 255.0
+        img_data = np.transpose(img_data, (2, 0, 1))
+        img_data = img_data[None]  # Add batch dimension
+
+        return img_data, pad, r
+
+    def postprocess_onnx(
+        self, outputs: np.ndarray, orig_shape: Tuple[int, int], pad: Tuple[int, int], r: float
+    ) -> List[DetectionResult]:
+        """Postprocess ONNX model outputs with NMS."""
+        # outputs shape: (1, num_detections, 4 + num_classes) or (1, 4 + num_classes, num_detections)
+        outputs = np.squeeze(outputs[0])
+
+        # Handle transposed output
+        if outputs.shape[0] > outputs.shape[1]:
+            outputs = np.transpose(outputs)
+
+        detections = []
+
+        # Get boxes and scores
+        boxes = outputs[:, :4]
+        scores = outputs[:, 4:]
+
+        # Get max class scores
+        class_ids = np.argmax(scores, axis=1)
+        confidences = np.max(scores, axis=1)
+
+        # Filter by confidence threshold
+        mask = confidences >= self.nms_config.conf_threshold
+        boxes = boxes[mask]
+        confidences = confidences[mask]
+        class_ids = class_ids[mask]
+
+        if len(boxes) == 0:
+            return []
+
+        # Convert boxes from center format to corner format
+        boxes_xyxy = np.zeros_like(boxes)
+        boxes_xyxy[:, 0] = boxes[:, 0] - boxes[:, 2] / 2  # x1
+        boxes_xyxy[:, 1] = boxes[:, 1] - boxes[:, 3] / 2  # y1
+        boxes_xyxy[:, 2] = boxes[:, 0] + boxes[:, 2] / 2  # x2
+        boxes_xyxy[:, 3] = boxes[:, 1] + boxes[:, 3] / 2  # y2
+
+        # Apply NMS
+        if self.nms_config.agnostic:
+            # Class-agnostic NMS
+            indices = cv2.dnn.NMSBoxes(
+                boxes_xyxy.tolist(),
+                confidences.tolist(),
+                self.nms_config.conf_threshold,
+                self.nms_config.iou_threshold,
+            )
+            indices = np.array(indices).flatten()
+        else:
+            # Class-specific NMS
+            indices = []
+            for class_id in np.unique(class_ids):
+                class_mask = class_ids == class_id
+                class_boxes = boxes_xyxy[class_mask]
+                class_confidences = confidences[class_mask]
+
+                class_indices = cv2.dnn.NMSBoxes(
+                    class_boxes.tolist(),
+                    class_confidences.tolist(),
+                    self.nms_config.conf_threshold,
+                    self.nms_config.iou_threshold,
+                )
+                class_indices = np.array(class_indices).flatten()
+                indices.extend(np.where(class_mask)[0][class_indices].tolist())
+            indices = np.array(indices)
+
+        # Limit detections
+        if len(indices) > self.nms_config.max_detections:
+            # Sort by confidence and take top detections
+            sorted_indices = np.argsort(confidences[indices])[::-1]
+            indices = indices[sorted_indices[: self.nms_config.max_detections]]
+
+        # Scale boxes back to original image coordinates
+        orig_h, orig_w = orig_shape
+
+        for idx in indices:
+            x1, y1, x2, y2 = boxes_xyxy[idx]
+
+            # Remove padding and scale
+            x1 = (x1 - pad[1]) / r
+            y1 = (y1 - pad[0]) / r
+            x2 = (x2 - pad[1]) / r
+            y2 = (y2 - pad[0]) / r
+
+            # Clip to image bounds
+            x1 = max(0, min(x1, orig_w))
+            y1 = max(0, min(y1, orig_h))
+            x2 = max(0, min(x2, orig_w))
+            y2 = max(0, min(y2, orig_h))
+
+            class_id = int(class_ids[idx])
+            class_name = self.classes.get(class_id, f"class_{class_id}")
+
+            detections.append(
+                DetectionResult(
+                    bbox=[float(x1), float(y1), float(x2), float(y2)],
+                    confidence=float(confidences[idx]),
+                    class_id=class_id,
+                    class_name=class_name,
+                )
+            )
+
+        return detections
+
+    def inference_pytorch(self, image: np.ndarray) -> List[DetectionResult]:
+        """Run inference with PyTorch model."""
+        results = self.model.predict(
+            image,
+            imgsz=self.imgsz,
+            conf=self.nms_config.conf_threshold,
+            iou=self.nms_config.iou_threshold,
+            max_det=self.nms_config.max_detections,
+            agnostic_nms=self.nms_config.agnostic,
+            verbose=False,
+        )
+
+        detections = []
+        if results and len(results) > 0:
+            result = results[0]
+            boxes = result.boxes
+
+            if boxes is not None:
+                for i in range(len(boxes)):
+                    box = boxes.xyxy[i].cpu().numpy()
+                    conf = float(boxes.conf[i].cpu().numpy())
+                    class_id = int(boxes.cls[i].cpu().numpy())
+                    class_name = self.classes.get(class_id, f"class_{class_id}")
+
+                    detections.append(
+                        DetectionResult(
+                            bbox=box.tolist(),
+                            confidence=conf,
+                            class_id=class_id,
+                            class_name=class_name,
+                        )
+                    )
+
+        return detections
+
+    def inference_onnx(self, image: np.ndarray) -> List[DetectionResult]:
+        """Run inference with ONNX model."""
+        # Preprocess
+        img_data, pad, r = self.preprocess_onnx(image)
+
+        # Run inference
+        model_inputs = self.ort_session.get_inputs()
+        outputs = self.ort_session.run(None, {model_inputs[0].name: img_data})
+
+        # Postprocess
+        orig_shape = image.shape[:2]
+        detections = self.postprocess_onnx(outputs, orig_shape, pad, r)
+
+        return detections
+
+    def __call__(self, image: Union[str, np.ndarray]) -> ImageResult:
+        """Run inference on a single image."""
+        # Load image if path provided
+        if isinstance(image, str):
+            image_path = image
+            image = cv2.imread(image_path)
+            if image is None:
+                raise ValueError(f"Failed to load image: {image_path}")
+        else:
+            image_path = "array"
+
+        image_shape = image.shape[:2]
+
+        # Run inference
+        start_time = time.perf_counter()
+
+        if self.model_format == "onnx":
+            detections = self.inference_onnx(image)
+        else:
+            detections = self.inference_pytorch(image)
+
+        inference_time = time.perf_counter() - start_time
+
+        return ImageResult(
+            image_path=image_path,
+            image_shape=image_shape,
+            detections=detections,
+            inference_time=inference_time,
+        )
+
+
+def draw_detections(
+    image: np.ndarray,
+    result: ImageResult,
+    classes: Dict[int, str],
+    box_thickness: int = 2,
+    font_scale: float = 0.5,
+    show_labels: bool = True,
+    show_conf: bool = True,
+) -> np.ndarray:
+    """Draw detection results on image."""
+    output = image.copy()
+
+    # Generate color palette
+    np.random.seed(42)
+    colors = np.random.randint(0, 255, size=(len(classes), 3), dtype=np.uint8)
+
+    for det in result.detections:
+        x1, y1, x2, y2 = [int(v) for v in det.bbox]
+        class_id = det.class_id
+        color = tuple(int(c) for c in colors[class_id % len(colors)])
+
+        # Draw box
+        cv2.rectangle(output, (x1, y1), (x2, y2), color, box_thickness)
+
+        # Draw label
+        if show_labels:
+            label = det.class_name
+            if show_conf:
+                label += f" {det.confidence:.2f}"
+
+            (text_width, text_height), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, 1)
+
+            # Draw label background
+            cv2.rectangle(
+                output,
+                (x1, y1 - text_height - 5),
+                (x1 + text_width, y1),
+                color,
+                -1,
+            )
+
+            # Draw text
+            cv2.putText(
+                output,
+                label,
+                (x1, y1 - 3),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                font_scale,
+                (255, 255, 255),
+                1,
+                cv2.LINE_AA,
+            )
+
+    return output
+
+
+def get_image_files(input_path: Path, extensions: List[str] = None) -> List[Path]:
+    """Get all image files from input path."""
+    if extensions is None:
+        extensions = [".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".webp"]
+
+    input_path = Path(input_path)
+
+    if input_path.is_file():
+        return [input_path]
+    elif input_path.is_dir():
+        files = []
+        for ext in extensions:
+            files.extend(input_path.rglob(f"*{ext}"))
+            files.extend(input_path.rglob(f"*{ext.upper()}"))
+        return sorted(set(files))
+    else:
+        raise ValueError(f"Input path does not exist: {input_path}")
+
+
+def load_inference_config(config_path: str) -> Dict[str, Any]:
+    """Load inference configuration from YAML file."""
+    with open(config_path, "r", encoding="utf-8") as f:
+        return yaml.safe_load(f) or {}
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="YOLO Batch Inference Script",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    # PyTorch model inference
+    python inference.py --model best.pt --input images/ --output results/
+
+    # ONNX model inference
+    python inference.py --model model.onnx --input images/ --output results/
+
+    # Single image inference
+    python inference.py --model best.pt --input image.jpg --output results/
+
+    # With custom NMS parameters
+    python inference.py --model best.pt --input images/ --conf 0.5 --iou 0.45 --max-det 100
+
+    # Save detection results as JSON
+    python inference.py --model best.pt --input images/ --save-json
+        """,
+    )
+
+    # Model settings
+    parser.add_argument("--model", "-m", type=str, required=True, help="Model path (.pt or .onnx)")
+    parser.add_argument(
+        "--format",
+        "-f",
+        type=str,
+        choices=["auto", "pytorch", "onnx"],
+        default="auto",
+        help="Model format (auto-detect by default)",
+    )
+    parser.add_argument("--imgsz", type=int, default=640, help="Input image size")
+    parser.add_argument("--device", type=str, default="auto", help="Device: auto, cpu, cuda, 0, 0,1")
+
+    # Input/Output settings
+    parser.add_argument("--input", "-i", type=str, required=True, help="Input image or directory")
+    parser.add_argument("--output", "-o", type=str, default="runs/inference", help="Output directory")
+    parser.add_argument(
+        "--save-vis",
+        action="store_true",
+        default=True,
+        help="Save visualization images",
+    )
+    parser.add_argument("--no-save-vis", action="store_false", dest="save_vis", help="Don't save visualization")
+    parser.add_argument("--save-json", action="store_true", help="Save detection results as JSON")
+    parser.add_argument("--save-txt", action="store_true", help="Save detection results as YOLO txt format")
+    parser.add_argument("--save-crop", action="store_true", help="Save cropped detection images")
+
+    # NMS settings
+    parser.add_argument("--conf", type=float, default=0.25, help="Confidence threshold")
+    parser.add_argument("--iou", type=float, default=0.7, help="NMS IoU threshold")
+    parser.add_argument("--max-det", type=int, default=300, help="Maximum detections per image")
+    parser.add_argument("--agnostic-nms", action="store_true", help="Class-agnostic NMS")
+    parser.add_argument("--multi-label", action="store_true", default=True, help="Multi-label detection")
+
+    # Visualization settings
+    parser.add_argument("--box-thickness", type=int, default=2, help="Bounding box line thickness")
+    parser.add_argument("--font-scale", type=float, default=0.5, help="Font scale for labels")
+    parser.add_argument("--show-labels", action="store_true", default=True, help="Show class labels")
+    parser.add_argument("--show-conf", action="store_true", default=True, help="Show confidence scores")
+    parser.add_argument("--no-show-labels", action="store_false", dest="show_labels")
+    parser.add_argument("--no-show-conf", action="store_false", dest="show_conf")
+
+    # Other settings
+    parser.add_argument("--config", "-c", type=str, help="YAML configuration file")
+    parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
+
+    return parser.parse_args()
+
+
+def main():
+    args = parse_args()
+
+    # Load config file if specified
+    config = {}
+    if args.config:
+        config = load_inference_config(args.config)
+
+    # Create NMS config
+    nms_config = NMSConfig(
+        conf_threshold=config.get("nms", {}).get("conf", args.conf),
+        iou_threshold=config.get("nms", {}).get("iou", args.iou),
+        max_detections=config.get("nms", {}).get("max_det", args.max_det),
+        agnostic=config.get("nms", {}).get("agnostic", args.agnostic_nms),
+        multi_label=config.get("nms", {}).get("multi_label", args.multi_label),
+    )
+
+    # Initialize inference engine
+    print(f"\n{'='*60}")
+    print("YOLO Inference")
+    print(f"{'='*60}")
+    print(f"Model: {args.model}")
+    print(f"Format: {args.format}")
+    print(f"Device: {args.device}")
+    print(f"Image size: {args.imgsz}")
+    print(f"NMS Config:")
+    print(f"  - Confidence threshold: {nms_config.conf_threshold}")
+    print(f"  - IoU threshold: {nms_config.iou_threshold}")
+    print(f"  - Max detections: {nms_config.max_detections}")
+    print(f"  - Class-agnostic: {nms_config.agnostic}")
+    print(f"{'='*60}\n")
+
+    engine = YOLOInference(
+        model_path=args.model,
+        nms_config=nms_config,
+        device=args.device,
+        imgsz=args.imgsz,
+    )
+
+    # Get input files
+    input_path = Path(args.input)
+    output_path = Path(args.output)
+    image_files = get_image_files(input_path)
+
+    print(f"Found {len(image_files)} images to process")
+
+    if len(image_files) == 0:
+        print("No images found!")
+        return
+
+    # Process images
+    all_results = []
+    total_detections = 0
+    total_time = 0.0
+
+    for i, image_file in enumerate(image_files):
+        # Read image
+        image = cv2.imread(str(image_file))
+        if image is None:
+            print(f"Warning: Failed to load {image_file}")
+            continue
+
+        # Run inference
+        result = engine(image)
+        all_results.append(result)
+        total_detections += len(result.detections)
+        total_time += result.inference_time
+
+        if args.verbose:
+            print(f"[{i+1}/{len(image_files)}] {image_file.name}: {len(result.detections)} detections, {result.inference_time*1000:.2f}ms")
+
+        # Calculate relative path for output
+        if input_path.is_file():
+            rel_path = image_file.name
+        else:
+            rel_path = image_file.relative_to(input_path)
+
+        # Save visualization
+        if args.save_vis:
+            vis_output = draw_detections(
+                image,
+                result,
+                engine.classes,
+                box_thickness=args.box_thickness,
+                font_scale=args.font_scale,
+                show_labels=args.show_labels,
+                show_conf=args.show_conf,
+            )
+
+            vis_path = output_path / "vis" / rel_path
+            vis_path.parent.mkdir(parents=True, exist_ok=True)
+            cv2.imwrite(str(vis_path), vis_output)
+
+        # Save cropped detections
+        if args.save_crop and result.detections:
+            crop_dir = output_path / "crops" / rel_path.stem
+            crop_dir.mkdir(parents=True, exist_ok=True)
+
+            for j, det in enumerate(result.detections):
+                x1, y1, x2, y2 = [int(v) for v in det.bbox]
+                x1, y1 = max(0, x1), max(0, y1)
+                x2, y2 = min(image.shape[1], x2), min(image.shape[0], y2)
+
+                crop = image[y1:y2, x1:x2]
+                crop_path = crop_dir / f"{det.class_name}_{j}.jpg"
+                cv2.imwrite(str(crop_path), crop)
+
+    # Save JSON results
+    if args.save_json:
+        json_path = output_path / "results.json"
+        json_path.parent.mkdir(parents=True, exist_ok=True)
+
+        json_data = {
+            "model": args.model,
+            "nms_config": {
+                "conf_threshold": nms_config.conf_threshold,
+                "iou_threshold": nms_config.iou_threshold,
+                "max_detections": nms_config.max_detections,
+                "agnostic": nms_config.agnostic,
+            },
+            "total_images": len(image_files),
+            "total_detections": total_detections,
+            "results": [r.to_dict() for r in all_results],
+        }
+
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(json_data, f, indent=2, ensure_ascii=False)
+
+        print(f"Results saved to: {json_path}")
+
+    # Save txt results
+    if args.save_txt:
+        txt_dir = output_path / "labels"
+        txt_dir.mkdir(parents=True, exist_ok=True)
+
+        for result in all_results:
+            if input_path.is_file():
+                txt_name = Path(result.image_path).stem + ".txt"
+            else:
+                rel_path = Path(result.image_path).relative_to(input_path)
+                txt_name = str(rel_path.with_suffix(".txt"))
+
+            txt_path = txt_dir / txt_name
+            txt_path.parent.mkdir(parents=True, exist_ok=True)
+
+            img_h, img_w = result.image_shape
+
+            with open(txt_path, "w") as f:
+                for det in result.detections:
+                    x1, y1, x2, y2 = det.bbox
+                    # Convert to YOLO format (center_x, center_y, width, height) normalized
+                    cx = (x1 + x2) / 2 / img_w
+                    cy = (y1 + y2) / 2 / img_h
+                    w = (x2 - x1) / img_w
+                    h = (y2 - y1) / img_h
+
+                    f.write(f"{det.class_id} {cx:.6f} {cy:.6f} {w:.6f} {h:.6f} {det.confidence:.4f}\n")
+
+        print(f"Labels saved to: {txt_dir}")
+
+    # Print summary
+    print(f"\n{'='*60}")
+    print("Inference Summary")
+    print(f"{'='*60}")
+    print(f"Total images:    {len(image_files)}")
+    print(f"Total detections: {total_detections}")
+    print(f"Total time:      {total_time:.2f}s")
+    print(f"Average time:    {total_time/len(image_files)*1000:.2f}ms per image")
+    print(f"Output saved to: {output_path}")
+    print(f"{'='*60}\n")
+
+
+if __name__ == "__main__":
+    main()
