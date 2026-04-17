@@ -1,0 +1,27 @@
+# Parking Spot Pose Dataset
+# =========================
+
+# 数据集路径（修改为你的实际路径）
+path: /path/to/your/parking-pose
+train: images/train
+val: images/val
+# test: images/test
+
+# 4 keypoints: 停车位四角（前左-前右-后右-后左，顺时针）
+# 实际图像中因透视+畸变呈凸四边形，非规则矩形
+# kpt_shape: [4, 3] -> (x, y, visibility)
+kpt_shape: [4, 3]
+# 前左<->前右、后右<->后左 在水平翻转时互换
+flip_idx: [1, 0, 3, 2]
+
+# Classes
+names:
+  0: parking_spot
+
+# Keypoint names per class
+kpt_names:
+  0:
+    - front_left   # 前左
+    - front_right  # 前右
+    - rear_right   # 后右
+    - rear_left    # 后左
