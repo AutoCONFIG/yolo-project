@@ -19,7 +19,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEFAULT_CONFIG="${SCRIPT_DIR}/configs/default.yaml"
 
 # Parse arguments
-CONFIG_FILE=""
+CONFIG_FILE="configs/train/parking_pose.yaml"
 EXTRA_ARGS=()
 
 while [[ $# -gt 0 ]]; do

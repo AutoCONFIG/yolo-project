@@ -5,7 +5,7 @@ mode: train
 
 # Model: 使用预训练 pose 模型微调（自动适配 nc 和 kpt_shape）
 model:
-  name: yolo26n-pose.pt
+  name: yolo26n-pose.yaml
 
 # Data
 data:

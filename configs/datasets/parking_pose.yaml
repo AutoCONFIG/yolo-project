@@ -2,7 +2,7 @@
 # =========================
 
 # 数据集路径（修改为你的实际路径）
-path: /path/to/your/parking-pose
+path: /media/yun/de2a43ce-446c-4a62-99b3-8ddc6ea1ef87/datasets/parking_pose
 train: images/train
 val: images/val
 # test: images/test
