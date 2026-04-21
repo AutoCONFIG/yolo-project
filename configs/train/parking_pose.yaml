@@ -15,7 +15,7 @@ data:
 # Training
 train:
   epochs: 100
-  batch: 16
+  batch: 88 #for 16G
   imgsz: 640
   device: null
   workers: 8
@@ -63,7 +63,7 @@ validation:
 
 # Output
 output:
-  project: runs/pose
+  project: ../../
   name: parking_spot
   save_period: -1
   exist_ok: false

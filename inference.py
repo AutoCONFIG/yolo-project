@@ -882,6 +882,8 @@ def draw_detections(
         # Draw pose keypoints
         if det.keypoints is not None:
             kpts = np.array(det.keypoints)
+            if kpts.ndim != 2:
+                kpts = kpts.reshape(-1, kpts.shape[-1])
 
             # Draw skeleton lines if we have enough keypoints
             if kpt_line and len(kpts) >= 17:
@@ -940,6 +942,123 @@ def draw_detections(
             )
 
     return output
+
+
+VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".wmv", ".flv", ".webm", ".m4v"}
+
+
+def is_video_file(path: Path) -> bool:
+    """Check if the given path is a video file."""
+    return Path(path).suffix.lower() in VIDEO_EXTENSIONS
+
+
+def inference_video(
+    engine: "YOLOInference",
+    input_path: Path,
+    output_path: Path,
+    fps: Optional[float] = None,
+    codec: str = "mp4v",
+    save_vis: bool = True,
+    save_json: bool = False,
+    verbose: bool = False,
+    vis_cfg: Dict[str, Any] = None,
+    args=None,
+) -> List["ImageResult"]:
+    """Run inference on a video file and save the annotated result as a video.
+
+    Args:
+        engine: YOLOInference engine instance.
+        input_path: Path to input video file.
+        output_path: Directory to save output video and optional JSON.
+        fps: Output video FPS. None = use source FPS.
+        codec: FourCC codec string (e.g. 'mp4v', 'xvid', 'h264').
+        save_vis: Whether to save the annotated video.
+        save_json: Whether to save per-frame detection results as JSON.
+        verbose: Print per-frame progress.
+        vis_cfg: Visualization config dict.
+        args: CLI args for visualization overrides.
+
+    Returns:
+        List of ImageResult for each frame.
+    """
+    cap = cv2.VideoCapture(str(input_path))
+    if not cap.isOpened():
+        raise ValueError(f"Cannot open video: {input_path}")
+
+    src_fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
+    src_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    src_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    out_fps = fps if fps is not None else src_fps
+
+    # Setup video writer
+    writer = None
+    if save_vis:
+        fourcc = cv2.VideoWriter_fourcc(*codec)
+        output_path.mkdir(parents=True, exist_ok=True)
+        video_out_path = output_path / f"{input_path.stem}_annotated{input_path.suffix if codec == 'mp4v' else '.mp4'}"
+        writer = cv2.VideoWriter(str(video_out_path), fourcc, out_fps, (src_w, src_h))
+        if not writer.isOpened():
+            # Fallback to mp4v if requested codec fails
+            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+            video_out_path = output_path / f"{input_path.stem}_annotated.mp4"
+            writer = cv2.VideoWriter(str(video_out_path), fourcc, out_fps, (src_w, src_h))
+
+    print(f"Video: {input_path.name} | {src_w}x{src_h} @ {src_fps:.1f}fps | {total_frames} frames")
+    if writer:
+        print(f"Output: {video_out_path}")
+
+    all_results = []
+    frame_idx = 0
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        result = engine(frame)
+        result.image_path = f"{input_path.name}#frame{frame_idx}"
+        all_results.append(result)
+
+        if save_vis and writer is not None:
+            vis = draw_detections(
+                frame,
+                result,
+                engine.classes,
+                box_thickness=vis_cfg.get("box_thickness", args.box_thickness) if vis_cfg else args.box_thickness,
+                font_scale=vis_cfg.get("font_scale", args.font_scale) if vis_cfg else args.font_scale,
+                show_labels=vis_cfg.get("show_labels", args.show_labels) if vis_cfg else args.show_labels,
+                show_conf=vis_cfg.get("show_conf", args.show_conf) if vis_cfg else args.show_conf,
+            )
+            writer.write(vis)
+
+        if verbose:
+            print(f"  Frame {frame_idx+1}/{total_frames}: {len(result.detections)} detections, {result.inference_time*1000:.1f}ms")
+
+        frame_idx += 1
+
+    cap.release()
+    if writer:
+        writer.release()
+
+    # Save JSON results
+    if save_json:
+        json_path = output_path / f"{input_path.stem}_results.json"
+        json_data = {
+            "video": str(input_path),
+            "fps": out_fps,
+            "total_frames": frame_idx,
+            "results": [r.to_dict() for r in all_results],
+        }
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(json_data, f, indent=2, ensure_ascii=False)
+        print(f"JSON results saved to: {json_path}")
+
+    total_dets = sum(len(r.detections) for r in all_results)
+    total_time = sum(r.inference_time for r in all_results)
+    print(f"Video done: {frame_idx} frames, {total_dets} detections, avg {total_time/frame_idx*1000:.1f}ms/frame")
+
+    return all_results
 
 
 def get_image_files(input_path: Path, extensions: List[str] = None) -> List[Path]:
@@ -1034,6 +1153,10 @@ Examples:
     parser.add_argument("--no-show-labels", action="store_false", dest="show_labels")
     parser.add_argument("--no-show-conf", action="store_false", dest="show_conf")
 
+    # Video settings
+    parser.add_argument("--fps", type=float, default=None, help="Output video FPS (default: same as source)")
+    parser.add_argument("--codec", type=str, default="mp4v", help="Output video codec (default: mp4v)")
+
     # Other settings
     parser.add_argument("--config", "-c", type=str, help="YAML configuration file")
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
@@ -1113,6 +1236,27 @@ def main():
     # Get input files
     input_path = Path(input_path)
     output_path = Path(output_path)
+
+    # Video inference path
+    if input_path.is_file() and is_video_file(input_path):
+        video_cfg = config.get("video", {})
+        out_fps = video_cfg.get("fps", args.fps)
+        out_codec = video_cfg.get("codec", args.codec)
+
+        inference_video(
+            engine=engine,
+            input_path=input_path,
+            output_path=output_path / "video",
+            fps=out_fps,
+            codec=out_codec,
+            save_vis=save_vis,
+            save_json=save_json,
+            verbose=verbose,
+            vis_cfg=vis_cfg,
+            args=args,
+        )
+        return
+
     image_files = get_image_files(input_path)
 
     print(f"Found {len(image_files)} images to process")
@@ -1222,7 +1366,9 @@ def main():
 
                         # Write keypoints if available
                         if det.keypoints is not None:
-                            kpts = det.keypoints
+                            kpts = np.array(det.keypoints, dtype=float)
+                            if kpts.ndim == 3:
+                                kpts = kpts.squeeze(0)
                             # YOLO pose format: class cx cy w h kp1_x kp1_y kp1_v kp2_x kp2_y kp2_v ... conf
                             cx = (x1 + x2) / 2 / img_w
                             cy = (y1 + y2) / 2 / img_h

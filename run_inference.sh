@@ -15,7 +15,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Default config file
-DEFAULT_CONFIG="${SCRIPT_DIR}/configs/inference.yaml"
+DEFAULT_CONFIG="${SCRIPT_DIR}/configs/inference/inference.yaml"
 
 # Parse arguments
 CONFIG_FILE=""
@@ -34,14 +34,17 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Check if config file is specified
+# Determine which config to use
 if [ -n "$CONFIG_FILE" ] && [ -f "$CONFIG_FILE" ]; then
+    # User specified a config file
     echo "Using config: $CONFIG_FILE"
     python "${SCRIPT_DIR}/inference.py" --config "$CONFIG_FILE" "${EXTRA_ARGS[@]}"
 elif [ -f "$DEFAULT_CONFIG" ]; then
+    # Fall back to default config
     echo "Using default config: $DEFAULT_CONFIG"
     python "${SCRIPT_DIR}/inference.py" --config "$DEFAULT_CONFIG" "${EXTRA_ARGS[@]}"
 else
-    # Run without config file (CLI only)
+    # No config file available, require CLI arguments
+    echo "No config file found. Using CLI arguments only."
     python "${SCRIPT_DIR}/inference.py" "${EXTRA_ARGS[@]}"
 fi
