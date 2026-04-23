@@ -785,6 +785,32 @@ class YOLOInference:
             return self.inference_batch_pytorch(images)
 
 
+def _draw_dashed_line(
+    img: np.ndarray,
+    pt1: Tuple[int, int],
+    pt2: Tuple[int, int],
+    color: Tuple[int, int, int],
+    thickness: int = 1,
+    dash_len: int = 10,
+    gap_len: int = 6,
+) -> None:
+    """Draw a dashed line between two points."""
+    x1, y1 = pt1
+    x2, y2 = pt2
+    dist = np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+    if dist < 1:
+        return
+    dashes = int(dist / (dash_len + gap_len)) + 1
+    for i in range(dashes):
+        s = i * (dash_len + gap_len) / dist
+        e = min((i * (dash_len + gap_len) + dash_len) / dist, 1.0)
+        sx = int(x1 + (x2 - x1) * s)
+        sy = int(y1 + (y2 - y1) * s)
+        ex = int(x1 + (x2 - x1) * e)
+        ey = int(y1 + (y2 - y1) * e)
+        cv2.line(img, (sx, sy), (ex, ey), color, thickness)
+
+
 def draw_detections(
     image: np.ndarray,
     result: ImageResult,
@@ -796,6 +822,8 @@ def draw_detections(
     mask_alpha: float = 0.4,
     kpt_radius: int = 5,
     kpt_line: bool = True,
+    skeleton: Optional[List[Tuple[int, int]]] = None,
+    kpt_names: Optional[Dict[int, List[str]]] = None,
 ) -> np.ndarray:
     """Draw detection results on image based on task type.
 
@@ -885,32 +913,63 @@ def draw_detections(
             if kpts.ndim != 2:
                 kpts = kpts.reshape(-1, kpts.shape[-1])
 
-            # Draw skeleton lines if we have enough keypoints
-            if kpt_line and len(kpts) >= 17:
-                # COCO skeleton connections
-                skeleton = [
-                    (0, 1), (0, 2), (1, 3), (2, 4),  # Head
-                    (5, 6), (5, 7), (7, 9), (6, 8), (8, 10),  # Arms
-                    (5, 11), (6, 12), (11, 12),  # Torso
-                    (11, 13), (13, 15), (12, 14), (14, 16)  # Legs
-                ]
+            # Visibility colors: 0=not labeled(gray), 1=occluded(orange), 2=visible(green)
+            VIS_COLOR_GRAY = (160, 160, 160)    # BGR gray for not-labeled
+            VIS_COLOR_ORANGE = (0, 165, 255)    # BGR orange for occluded
+            VIS_COLOR_GREEN = (0, 220, 0)       # BGR green for visible
+
+            def _get_vis(kpt_arr, idx):
+                """Get visibility value: 0=not labeled, 1=occluded, 2=visible."""
+                if len(kpt_arr) > 2:
+                    v = kpt_arr[2]
+                    # YOLO convention: integer 0/1/2 for visibility
+                    if v >= 1.5:
+                        return 2  # visible
+                    elif v >= 0.5:
+                        return 1  # occluded
+                    else:
+                        return 0  # not labeled
+                return 2  # default visible if no visibility field
+
+            # Draw skeleton lines using config-driven skeleton
+            if kpt_line and skeleton is not None:
                 for i, j in skeleton:
                     if i < len(kpts) and j < len(kpts):
                         pt1 = (int(kpts[i][0]), int(kpts[i][1]))
                         pt2 = (int(kpts[j][0]), int(kpts[j][1]))
-                        # Check visibility if available
-                        visible1 = kpts[i][2] > 0.5 if len(kpts[i]) > 2 else True
-                        visible2 = kpts[j][2] > 0.5 if len(kpts[j]) > 2 else True
-                        if visible1 and visible2:
-                            cv2.line(output, pt1, pt2, color, max(1, box_thickness - 1))
+                        vis_i = _get_vis(kpts[i], i)
+                        vis_j = _get_vis(kpts[j], j)
+                        # Both visible → solid green line
+                        if vis_i == 2 and vis_j == 2:
+                            cv2.line(output, pt1, pt2, VIS_COLOR_GREEN, max(2, box_thickness))
+                        # At least one occluded → dashed orange line
+                        elif vis_i >= 1 and vis_j >= 1:
+                            _draw_dashed_line(output, pt1, pt2, VIS_COLOR_ORANGE, max(2, box_thickness))
+                        # One not-labeled → skip line (or very faint dashed gray)
+                        # We still draw a faint hint so the shape is visible
+                        elif vis_i >= 0 and vis_j >= 0:
+                            _draw_dashed_line(output, pt1, pt2, VIS_COLOR_GRAY, 1)
 
-            # Draw keypoint circles
-            for kpt in kpts:
+            # Draw keypoint circles with visibility differentiation
+            for kidx, kpt in enumerate(kpts):
                 x, y = int(kpt[0]), int(kpt[1])
-                visible = kpt[2] > 0.5 if len(kpt) > 2 else True
-                if visible:
-                    cv2.circle(output, (x, y), kpt_radius, color, -1)
+                vis = _get_vis(kpt, kidx)
+
+                if vis == 2:
+                    # Visible: solid filled circle in green with white border
+                    cv2.circle(output, (x, y), kpt_radius, VIS_COLOR_GREEN, -1)
                     cv2.circle(output, (x, y), kpt_radius, (255, 255, 255), 1)
+                elif vis == 1:
+                    # Occluded: filled circle in orange with X mark
+                    cv2.circle(output, (x, y), kpt_radius, VIS_COLOR_ORANGE, -1)
+                    cv2.circle(output, (x, y), kpt_radius, (255, 255, 255), 1)
+                    # Draw X mark inside
+                    r = max(2, kpt_radius - 2)
+                    cv2.line(output, (x - r, y - r), (x + r, y + r), (255, 255, 255), 1)
+                    cv2.line(output, (x - r, y + r), (x + r, y - r), (255, 255, 255), 1)
+                else:
+                    # Not labeled: hollow circle (ring only) in gray
+                    cv2.circle(output, (x, y), kpt_radius, VIS_COLOR_GRAY, 1)
 
         # Draw label (skip for pose when keypoints are drawn)
         if show_labels and det.keypoints is None:
@@ -963,6 +1022,8 @@ def inference_video(
     verbose: bool = False,
     vis_cfg: Dict[str, Any] = None,
     args=None,
+    skeleton: Optional[List[Tuple[int, int]]] = None,
+    kpt_names: Optional[Dict[int, List[str]]] = None,
 ) -> List["ImageResult"]:
     """Run inference on a video file and save the annotated result as a video.
 
@@ -1029,6 +1090,8 @@ def inference_video(
                 font_scale=vis_cfg.get("font_scale", args.font_scale) if vis_cfg else args.font_scale,
                 show_labels=vis_cfg.get("show_labels", args.show_labels) if vis_cfg else args.show_labels,
                 show_conf=vis_cfg.get("show_conf", args.show_conf) if vis_cfg else args.show_conf,
+                skeleton=skeleton,
+                kpt_names=kpt_names,
             )
             writer.write(vis)
 
@@ -1059,6 +1122,24 @@ def inference_video(
     print(f"Video done: {frame_idx} frames, {total_dets} detections, avg {total_time/frame_idx*1000:.1f}ms/frame")
 
     return all_results
+
+
+def get_video_files(input_path: Path) -> List[Path]:
+    """Get all video files from input path (directory or single file)."""
+    input_path = Path(input_path)
+
+    if input_path.is_file():
+        if is_video_file(input_path):
+            return [input_path]
+        return []
+    elif input_path.is_dir():
+        files = []
+        for ext in VIDEO_EXTENSIONS:
+            files.extend(input_path.rglob(f"*{ext}"))
+            files.extend(input_path.rglob(f"*{ext.upper()}"))
+        return sorted(set(files))
+    else:
+        raise ValueError(f"Input path does not exist: {input_path}")
 
 
 def get_image_files(input_path: Path, extensions: List[str] = None) -> List[Path]:
@@ -1224,6 +1305,13 @@ def main():
     print(f"  - Classes filter: {classes_filter if classes_filter else 'All'}")
     print(f"{'='*60}\n")
 
+    # Parse skeleton connections from config
+    skeleton = None
+    skeleton_cfg = vis_cfg.get("skeleton", None)
+    if skeleton_cfg is not None:
+        skeleton = [tuple(pair) for pair in skeleton_cfg]
+    kpt_names = vis_cfg.get("kpt_names", None)
+
     engine = YOLOInference(
         model_path=model,
         nms_config=nms_config,
@@ -1237,7 +1325,7 @@ def main():
     input_path = Path(input_path)
     output_path = Path(output_path)
 
-    # Video inference path
+    # Video inference path — single video file
     if input_path.is_file() and is_video_file(input_path):
         video_cfg = config.get("video", {})
         out_fps = video_cfg.get("fps", args.fps)
@@ -1254,15 +1342,53 @@ def main():
             verbose=verbose,
             vis_cfg=vis_cfg,
             args=args,
+            skeleton=skeleton,
+            kpt_names=kpt_names,
         )
         return
 
-    image_files = get_image_files(input_path)
+    # Directory input: smart scan for both videos and images
+    video_files = []
+    image_files = []
+    if input_path.is_dir():
+        video_files = get_video_files(input_path)
+        image_files = get_image_files(input_path)
+    elif input_path.is_file():
+        image_files = [input_path]
 
-    print(f"Found {len(image_files)} images to process")
+    # Process videos
+    if video_files:
+        video_cfg = config.get("video", {})
+        out_fps = video_cfg.get("fps", args.fps)
+        out_codec = video_cfg.get("codec", args.codec)
+        print(f"Found {len(video_files)} video(s) to process")
 
-    if len(image_files) == 0:
-        print("No images found!")
+        for vf in video_files:
+            if verbose:
+                print(f"\nProcessing video: {vf}")
+            inference_video(
+                engine=engine,
+                input_path=vf,
+                output_path=output_path / "video",
+                fps=out_fps,
+                codec=out_codec,
+                save_vis=save_vis,
+                save_json=save_json,
+                verbose=verbose,
+                vis_cfg=vis_cfg,
+                args=args,
+                skeleton=skeleton,
+                kpt_names=kpt_names,
+            )
+
+    # Process images
+    if image_files:
+        print(f"Found {len(image_files)} images to process")
+    elif not video_files:
+        print("No images or videos found!")
+        return
+
+    if not image_files:
         return
 
     # Process images in batches
@@ -1295,6 +1421,8 @@ def main():
                 font_scale=vis_cfg.get("font_scale", args.font_scale),
                 show_labels=vis_cfg.get("show_labels", args.show_labels),
                 show_conf=vis_cfg.get("show_conf", args.show_conf),
+                skeleton=skeleton,
+                kpt_names=kpt_names,
             )
 
             vis_path = output_path / "vis" / rel_path

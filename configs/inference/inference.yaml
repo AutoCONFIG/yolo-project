@@ -12,7 +12,7 @@ model:
 
 # Input/Output settings
 io:
-  input: /media/yun/de2a43ce-446c-4a62-99b3-8ddc6ea1ef87/datasets/parking_pose/images/val           # Input image or directory
+  input: /media/yun/706bc403-c76c-4fdd-8a3f-d954b6189048/实习/停车泊位昆明/           # Input image or directory
   output: runs/inference   # Output directory
   save_vis: true           # Save visualization images
   save_json: false         # Save detection results as JSON
@@ -33,6 +33,11 @@ visualization:
   font_scale: 0.5   # Font scale for labels
   show_labels: true # Show class labels
   show_conf: true   # Show confidence scores
+  # Skeleton connections for pose keypoints (closed loop: 0→1→2→3→0)
+  # Parking spot 4-keypoint order: front_left, front_right, rear_right, rear_left
+  skeleton: [[0, 1], [1, 2], [2, 3], [3, 0]]
+  kpt_names:
+    0: [front_left, front_right, rear_right, rear_left]
 
 # Other settings
 verbose: true
