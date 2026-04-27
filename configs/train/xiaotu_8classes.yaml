@@ -1,26 +1,26 @@
-# YOLO Pose Training Configuration - Parking Spot
-# =================================================
+# YOLO Detection Training Configuration - Xiaotu 8 Classes
+# ========================================================
 
 mode: train
 
-# Model: 从YAML构建网络，从头训练（自动适配 nc 和 kpt_shape）
+# Model: 从YAML构建网络，从头训练（自动适配 nc）
 model:
-  name: yolo26n-pose.yaml
+  name: yolo26s.yaml
   pretrained: False
-  task: pose  # detect/segment/classify/pose/obb
+  task: detect  # detect/segment/classify/pose/obb
 
 # Data
 data:
-  config: configs/datasets/parking_pose.yaml
+  config: configs/datasets/xiaotu_8classes.yaml
   split: val
 
 # Training
 train:
   epochs: 100
   time:  # max hours to train; overrides epochs if set
-  batch: 88 #for 16G
+  batch: 24 #for 24G
   imgsz: 640
-  device: null
+  device: 2
   workers: 8
   resume: false
   patience: 100
@@ -55,9 +55,7 @@ train:
   cls: 0.5
   cls_pw: 0.0  # class weights power for imbalance
   dfl: 1.5
-  pose: 12.0  # pose loss gain
-  kobj: 1.0   # keypoint objectness loss gain
-  rle: 1.0    # rle loss gain
+  nbs: 64
 
   # Task-specific
   dropout: 0.0
@@ -98,7 +96,7 @@ validation:
 # Output
 output:
   project: ../../
-  name: parking_spot
+  name: xiaotu_8classes
   save_period: -1
   exist_ok: false
   verbose: true

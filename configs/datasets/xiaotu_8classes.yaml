@@ -1,0 +1,19 @@
+# Parking Spot Pose Dataset
+# =========================
+
+# 数据集路径（修改为你的实际路径）
+path: /data2/kaiyun/datasets_xiaotu_label
+train: images/train
+val: images/val
+# test: images/test
+
+# Classes
+names:
+  0: person         # 0人 (pedestrian and passenger)
+  1: head_naked    # 1头 (no helmet)
+  2: helmet        # 2头盔
+  3: bicycle       # 3自行车 (with rider)
+  4: ebike         # 4电动车 (with rider, no rain canopy)
+  5: tricycle      # 5三轮车 (with rider)
+  6: mobile_phone  # 6手机
+  7: ebike_canopy  # 7电动车 (with rain canopy) 

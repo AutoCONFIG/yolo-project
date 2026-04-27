@@ -297,19 +297,71 @@ def train(config: Dict):
     pretrained = get_nested_value(config, "model", "pretrained")
     data_config = get_nested_value(config, "data", "config", default="coco8.yaml")
 
+    # --- Core training settings ---
     epochs = get_nested_value(config, "train", "epochs", default=100)
+    time = get_nested_value(config, "train", "time")  # max hours, overrides epochs if set
     batch = get_nested_value(config, "train", "batch", default=16)
     imgsz = get_nested_value(config, "train", "imgsz", default=640)
     device = get_nested_value(config, "train", "device")
     workers = get_nested_value(config, "train", "workers", default=8)
     resume = get_nested_value(config, "train", "resume", default=False)
+    patience = get_nested_value(config, "train", "patience", default=100)
+    cache = get_nested_value(config, "train", "cache")  # True/'ram'/'disk'/False
+    amp = get_nested_value(config, "train", "amp", default=True)
+    save = get_nested_value(config, "train", "save", default=True)
+    rect = get_nested_value(config, "train", "rect", default=False)
+    single_cls = get_nested_value(config, "train", "single_cls", default=False)
+    fraction = get_nested_value(config, "train", "fraction", default=1.0)
+    freeze = get_nested_value(config, "train", "freeze")  # int or list
+    multi_scale = get_nested_value(config, "train", "multi_scale", default=0.0)
+    compile_flag = get_nested_value(config, "train", "compile")  # bool or str
+    end2end = get_nested_value(config, "train", "end2end")  # important for YOLO26
+    nbs = get_nested_value(config, "train", "nbs", default=64)
+    profile = get_nested_value(config, "train", "profile", default=False)
 
+    # --- Optimizer settings ---
     optimizer = get_nested_value(config, "train", "optimizer", default="auto")
     lr0 = get_nested_value(config, "train", "lr0", default=0.01)
     lrf = get_nested_value(config, "train", "lrf", default=0.01)
     momentum = get_nested_value(config, "train", "momentum", default=0.937)
     weight_decay = get_nested_value(config, "train", "weight_decay", default=0.0005)
+    cos_lr = get_nested_value(config, "train", "cos_lr", default=False)
+    close_mosaic = get_nested_value(config, "train", "close_mosaic", default=10)
+    seed = get_nested_value(config, "train", "seed", default=0)
+    deterministic = get_nested_value(config, "train", "deterministic", default=True)
 
+    # --- Warmup ---
+    warmup_epochs = get_nested_value(config, "train", "warmup_epochs", default=3.0)
+    warmup_momentum = get_nested_value(config, "train", "warmup_momentum", default=0.8)
+    warmup_bias_lr = get_nested_value(config, "train", "warmup_bias_lr", default=0.1)
+
+    # --- Loss gains ---
+    box = get_nested_value(config, "train", "box", default=7.5)
+    cls = get_nested_value(config, "train", "cls", default=0.5)
+    cls_pw = get_nested_value(config, "train", "cls_pw", default=0.0)
+    dfl = get_nested_value(config, "train", "dfl", default=1.5)
+    pose = get_nested_value(config, "train", "pose", default=12.0)
+    kobj = get_nested_value(config, "train", "kobj", default=1.0)
+    rle = get_nested_value(config, "train", "rle", default=1.0)
+    angle = get_nested_value(config, "train", "angle", default=1.0)
+
+    # --- Task-specific settings ---
+    overlap_mask = get_nested_value(config, "train", "overlap_mask", default=True)
+    mask_ratio = get_nested_value(config, "train", "mask_ratio", default=4)
+    dropout = get_nested_value(config, "train", "dropout", default=0.0)
+    task = get_nested_value(config, "model", "task")  # detect/segment/classify/pose/obb
+
+    # --- Validation during training ---
+    val = get_nested_value(config, "validation", "val", default=True)
+    val_split = get_nested_value(config, "data", "split", default="val")
+    conf = get_nested_value(config, "validation", "conf")  # None = use ultralytics default
+    iou = get_nested_value(config, "validation", "iou", default=0.7)
+    max_det = get_nested_value(config, "validation", "max_det", default=300)
+    half = get_nested_value(config, "validation", "half", default=False)
+    plots = get_nested_value(config, "validation", "plots", default=True)
+    save_json = get_nested_value(config, "validation", "save_json", default=False)
+
+    # --- Output settings ---
     project = get_nested_value(config, "output", "project")
     name = get_nested_value(config, "output", "name")
     save_period = get_nested_value(config, "output", "save_period", default=-1)
@@ -321,11 +373,13 @@ def train(config: Dict):
     print("YOLO Training Configuration")
     print(f"{'='*60}")
     print(f"Model:      {model_name}")
+    print(f"Pretrained: {pretrained}")
     print(f"Data:       {data_config}")
     print(f"Epochs:     {epochs}")
     print(f"Batch:      {batch}")
     print(f"Image size: {imgsz}")
     print(f"Device:     {device or 'auto'}")
+    print(f"Cache:      {cache or 'False'}")
     print(f"Optimizer:  {optimizer}")
     print(f"Learning rate: {lr0}")
     print(f"{'='*60}\n")
@@ -333,7 +387,7 @@ def train(config: Dict):
     # Load model
     if model_yaml:
         model = YOLO(model_yaml)
-        if pretrained:
+        if isinstance(pretrained, str):
             model.load(pretrained)
     else:
         model = YOLO(model_name)
@@ -350,25 +404,97 @@ def train(config: Dict):
         "lrf": lrf,
         "momentum": momentum,
         "weight_decay": weight_decay,
+        "patience": patience,
+        "amp": amp,
+        "save": save,
+        "cos_lr": cos_lr,
+        "close_mosaic": close_mosaic,
+        "seed": seed,
+        "deterministic": deterministic,
+        "warmup_epochs": warmup_epochs,
+        "warmup_momentum": warmup_momentum,
+        "warmup_bias_lr": warmup_bias_lr,
+        "box": box,
+        "cls": cls,
+        "dfl": dfl,
+        "nbs": nbs,
         "save_period": save_period,
         "exist_ok": exist_ok,
         "verbose": verbose,
         "resume": resume,
     }
 
-    # Add optional args
-    if device:
+    # Add optional args — all use `is not None` for consistency and robustness.
+    # This ensures explicit False/0 values in YAML are always forwarded to ultralytics.
+    if device is not None:
         train_args["device"] = device
-    if project:
+    if pretrained is not None:
+        train_args["pretrained"] = pretrained
+    if cache is not None:
+        train_args["cache"] = cache
+    if time is not None:
+        train_args["time"] = time
+    if rect is not None:
+        train_args["rect"] = rect
+    if single_cls is not None:
+        train_args["single_cls"] = single_cls
+    if fraction is not None:
+        train_args["fraction"] = fraction
+    if freeze is not None:
+        train_args["freeze"] = freeze
+    if multi_scale is not None:
+        train_args["multi_scale"] = multi_scale
+    if compile_flag is not None:
+        train_args["compile"] = compile_flag
+    if end2end is not None:
+        train_args["end2end"] = end2end
+    if profile is not None:
+        train_args["profile"] = profile
+    if cls_pw is not None:
+        train_args["cls_pw"] = cls_pw
+    if pose is not None:
+        train_args["pose"] = pose
+    if kobj is not None:
+        train_args["kobj"] = kobj
+    if rle is not None:
+        train_args["rle"] = rle
+    if angle is not None:
+        train_args["angle"] = angle
+    if overlap_mask is not None:
+        train_args["overlap_mask"] = overlap_mask
+    if mask_ratio is not None:
+        train_args["mask_ratio"] = mask_ratio
+    if dropout is not None:
+        train_args["dropout"] = dropout
+    if task is not None:
+        train_args["task"] = task
+    if val is not None:
+        train_args["val"] = val
+    if val_split is not None:
+        train_args["split"] = val_split
+    if conf is not None:
+        train_args["conf"] = conf
+    if iou is not None:
+        train_args["iou"] = iou
+    if max_det is not None:
+        train_args["max_det"] = max_det
+    if half is not None:
+        train_args["half"] = half
+    if plots is not None:
+        train_args["plots"] = plots
+    if save_json is not None:
+        train_args["save_json"] = save_json
+    if project is not None:
         train_args["project"] = project
-    if name:
+    if name is not None:
         train_args["name"] = name
 
     # Add augmentation settings
     aug_keys = [
         "hsv_h", "hsv_s", "hsv_v", "degrees", "translate",
         "scale", "shear", "perspective", "flipud", "fliplr",
-        "mosaic", "mixup", "copy_paste", "erasing", "cutmix"
+        "bgr", "mosaic", "mixup", "cutmix", "copy_paste",
+        "copy_paste_mode", "auto_augment", "erasing",
     ]
     for key in aug_keys:
         value = get_nested_value(config, "augmentation", key)
@@ -434,7 +560,7 @@ def validate(config: Dict):
         "verbose": verbose,
     }
 
-    if device:
+    if device is not None:
         val_args["device"] = device
     if project:
         val_args["project"] = project
@@ -492,7 +618,7 @@ def predict(config: Dict):
         "iou": iou,
     }
 
-    if device:
+    if device is not None:
         predict_args["device"] = device
     if project:
         predict_args["project"] = project
