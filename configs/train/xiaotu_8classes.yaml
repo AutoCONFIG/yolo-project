@@ -55,9 +55,13 @@ train:
   cls: 0.5
   cls_pw: 0.0  # class weights power for imbalance
   dfl: 1.5
-  nbs: 64
 
-  # Task-specific
+  # Training control
+  close_mosaic: 10  # disable mosaic for last N epochs
+  seed: 0           # random seed for reproducibility
+  deterministic: true  # enable deterministic mode
+
+  # Task-specific (segment only)
   dropout: 0.0
   overlap_mask: true
   mask_ratio: 4
@@ -92,6 +96,13 @@ validation:
   half: false
   plots: true
   save_json: false
+  dnn: false
+  agnostic_nms: false
+  augment: false
+
+# Misc
+cfg:
+tracker: botsort.yaml
 
 # Output
 output:

@@ -53,11 +53,16 @@ train:
   # Loss gains
   box: 7.5
   cls: 0.5
-  cls_pw: 0.0  # class weights power for imbalance
+  cls_pw: 0.0
   dfl: 1.5
-  pose: 12.0  # pose loss gain
-  kobj: 1.0   # keypoint objectness loss gain
-  rle: 1.0    # rle loss gain
+  pose: 12.0
+  kobj: 1.0
+  rle: 1.0
+
+  # Training control
+  close_mosaic: 10
+  seed: 0
+  deterministic: true
 
   # Task-specific
   dropout: 0.0
@@ -94,6 +99,13 @@ validation:
   half: false
   plots: true
   save_json: false
+  dnn: false
+  agnostic_nms: false
+  augment: false
+
+# Misc
+cfg:
+tracker: botsort.yaml
 
 # Output
 output:

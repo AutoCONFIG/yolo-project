@@ -24,6 +24,16 @@ validation:
   iou: 0.7
   plots: true
   save_json: false
+  dnn: false
+  agnostic_nms: false
+  classes: null  # e.g. [0, 1] for specific classes
+  augment: false
+  half: false
+  max_det: 300
 
 output:
   verbose: true
+
+# Misc
+cfg:
+tracker: botsort.yaml
