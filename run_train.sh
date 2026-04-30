@@ -16,7 +16,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 DEFAULT_CONFIG="${SCRIPT_DIR}/configs/default.yaml"
 
-CONFIG_FILE="configs/train/xiaotu_8classes.yaml"
+CONFIG_FILE=""
 EXTRA_ARGS=()
 
 while [[ $# -gt 0 ]]; do

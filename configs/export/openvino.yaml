@@ -1,0 +1,26 @@
+# OpenVINO Export Configuration
+# ===============================
+# Export YOLO model to OpenVINO format for Intel CPU/GPU inference.
+
+model:
+  path: runs/detect/train/weights/best.pt
+  format: openvino
+  imgsz: 640
+  batch: 1
+  device: cpu
+
+export:
+  half: false
+  dynamic: false
+  simplify: true
+  opset: null
+  nms: false
+  int8: false
+
+output:
+  path: null
+  verbose: true
+
+verify:
+  enabled: false
+  source: null

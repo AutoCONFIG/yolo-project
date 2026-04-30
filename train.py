@@ -20,10 +20,9 @@ Usage:
 
 import argparse
 import sys
+import traceback
 from pathlib import Path
-from typing import Any, Dict, Optional
-
-import yaml
+from typing import Any, Dict
 
 # Add ultralytics submodule to path
 ULTRALYTICS_PATH = Path(__file__).parent / "ultralytics"
@@ -32,87 +31,12 @@ if ULTRALYTICS_PATH.exists():
 
 # Patch ultralytics downloads to use weights_dir (must be before ultralytics imports)
 from utils.downloads import patch_ultralytics_downloads
+
 patch_ultralytics_downloads()
 
 from ultralytics import YOLO
 
-
-# ─── Boolean CLI helper ───────────────────────────────────────────────
-# Creates paired flags: --flag (sets True) and --no-flag (sets False).
-# Omitting both yields None (YAML default preserved).
-
-
-def set_boolean_argument(
-    parser: argparse.ArgumentParser,
-    dest: str,
-    flag_name: str | None = None,
-    *,
-    neg_prefix: str = "no-",
-    help_true: str = "",
-    help_false: str = "",
-) -> None:
-    """Add a paired boolean argument (e.g. --amp / --no-amp) to a parser.
-
-    Parameters
-    ----------
-    parser :
-        The argparse.ArgumentParser to add arguments to.
-    dest :
-        Destination attribute name in the parsed Namespace.
-    flag_name :
-        The positive flag text (default: *dest* with underscores replaced by hyphens).
-    neg_prefix :
-        Prefix for the negative flag (default ``"no-"``).
-    help_true / help_false :
-        Help text for the positive / negative flags.
-    """
-    flag = flag_name or dest.replace("_", "-")
-
-    positive = f"--{flag}"
-    negative = f"--{neg_prefix}{flag}"
-
-    group = parser.add_mutually_exclusive_group()
-
-    # Positive flag
-    group.add_argument(
-        positive,
-        dest=dest,
-        action="store_const",
-        const=True,
-        default=None,
-        help=help_true or f"Enable {flag}",
-    )
-    # Negative flag
-    group.add_argument(
-        negative,
-        dest=dest,
-        action="store_const",
-        const=False,
-        default=None,
-        help=help_false or f"Disable {flag}",
-    )
-
-
-# ─── Config loaders ───────────────────────────────────────────────────
-
-
-def load_yaml_config(config_path: str) -> Dict[str, Any]:
-    """Load configuration from YAML file."""
-    with open(config_path, "r", encoding="utf-8") as f:
-        config = yaml.safe_load(f)
-    return config if config else {}
-
-
-def merge_configs(base_config: Dict, override_args: Dict) -> Dict:
-    """Merge override args into base config."""
-    result = base_config.copy()
-    for key, value in override_args.items():
-        if value is not None:
-            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-                result[key] = {**result[key], **value}
-            else:
-                result[key] = value
-    return result
+from utils.config import get_nested_value, load_yaml_config, merge_configs, set_boolean_argument, to_bool
 
 
 # ─── Argument parser ─────────────────────────────────────────────────
@@ -542,17 +466,6 @@ Examples:
 # ─── CLI → nested config ──────────────────────────────────────────────
 
 
-def to_bool(value: str | None) -> bool | None:
-    """Convert 'true'/'false' string to bool. Returns None for None or unknown."""
-    if value is None:
-        return None
-    if value.lower() == "true":
-        return True
-    if value.lower() == "false":
-        return False
-    return None
-
-
 def args_to_config(args: argparse.Namespace) -> Dict[str, Any]:
     """Convert command line args to nested config dict."""
     config = {}
@@ -837,20 +750,6 @@ def args_to_config(args: argparse.Namespace) -> Dict[str, Any]:
         config["tracker"] = args.tracker
 
     return config
-
-
-# ─── Helpers ──────────────────────────────────────────────────────────
-
-
-def get_nested_value(config: Dict, *keys, default=None):
-    """Get nested value from config dict."""
-    current = config
-    for key in keys:
-        if isinstance(current, dict) and key in current:
-            current = current[key]
-        else:
-            return default
-    return current
 
 
 # ─── Train ────────────────────────────────────────────────────────────
@@ -1277,27 +1176,36 @@ def predict(config: Dict):
 def main():
     args = parse_args()
 
-    # Load config from file if specified
-    config = {}
-    if args.config:
-        config = load_yaml_config(args.config)
+    try:
+        # Load config from file if specified
+        config = {}
+        if args.config:
+            config = load_yaml_config(args.config)
 
-    # Merge CLI args into config (CLI takes precedence)
-    cli_config = args_to_config(args)
-    config = merge_configs(config, cli_config)
+        # Merge CLI args into config (CLI takes precedence)
+        cli_config = args_to_config(args)
+        config = merge_configs(config, cli_config)
 
-    # Determine mode
-    mode = config.get("mode", "train")
+        # Determine mode
+        mode = config.get("mode", "train")
 
-    # Run appropriate mode
-    if mode == "train":
-        train(config)
-    elif mode == "val":
-        validate(config)
-    elif mode == "predict":
-        predict(config)
-    else:
-        print(f"Unknown mode: {mode}")
+        # Run appropriate mode
+        if mode == "train":
+            train(config)
+        elif mode == "val":
+            validate(config)
+        elif mode == "predict":
+            predict(config)
+        else:
+            raise ValueError(f"Unknown mode: {mode}")
+    except KeyboardInterrupt:
+        print("\nTraining interrupted by user.")
+        sys.exit(130)
+    except Exception as e:
+        print(f"\n{'='*60}")
+        print(f"ERROR: {e}")
+        print(f"{'='*60}")
+        traceback.print_exc()
         sys.exit(1)
 
 

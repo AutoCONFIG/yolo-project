@@ -62,8 +62,8 @@ import shutil
 from pathlib import Path
 
 # ========== 可修改的默认参数 ==========
-DEFAULT_SOURCE = r"D:\1"
-DEFAULT_OUTPUT = r"D:\parking_pose"
+DEFAULT_SOURCE = "./data/raw"
+DEFAULT_OUTPUT = "./datasets/prepared"
 DEFAULT_VAL_RATIO = 0.2
 DEFAULT_SEED = 42
 DEFAULT_EMPTY_RATIO = 0.1  # 负样本比例 (0=不提取, 0.1=10%)
@@ -82,15 +82,16 @@ def detect_task_type(pairs: list[tuple[Path, Path]]) -> tuple[str, tuple[int, in
 
     通过采样标签文件的列数来判断:
     - 5列 (cls cx cy w h) → "detect" (目标检测)
+    - 偶数列 (>5, 每2列一对) → "segment" (实例分割)
     - 5 + nkpt*ndim 列  → "pose"   (关键点/姿态估计)
 
     Returns:
         (task_type, kpt_shape):
-            task_type: "detect" 或 "pose"
-            kpt_shape: detect时为 None, pose时为 (nkpt, ndim)
+            task_type: "detect", "segment" 或 "pose"
+            kpt_shape: detect/segment时为 None, pose时为 (nkpt, ndim)
     """
-    col_counts: dict[int, int] = {}  # col_count -> 出现次数
-    sample_limit = min(len(pairs), 50)  # 最多采样50个文件
+    col_counts: dict[int, int] = {}
+    sample_limit = min(len(pairs), 50)
 
     for txt_path, _ in pairs[:sample_limit]:
         try:
@@ -105,17 +106,13 @@ def detect_task_type(pairs: list[tuple[Path, Path]]) -> tuple[str, tuple[int, in
             continue
 
     if not col_counts:
-        # 没有有效标签行，默认detect
         return "detect", None
 
-    # 取出现次数最多的列数作为判断依据
     dominant_cols = max(col_counts, key=col_counts.get)
 
     if dominant_cols == 5:
         return "detect", None
 
-    # 尝试解析为pose格式: 5 + nkpt * ndim
-    # 优先尝试 ndim=3 (x,y,visibility), 其次 ndim=2 (x,y)
     extra = dominant_cols - 5
     if extra <= 0:
         return "detect", None
@@ -126,7 +123,9 @@ def detect_task_type(pairs: list[tuple[Path, Path]]) -> tuple[str, tuple[int, in
             if nkpt > 0:
                 return "pose", (nkpt, ndim)
 
-    # 无法解析为pose，回退到detect
+    if extra % 2 == 0 and extra >= 6:
+        return "segment", None
+
     return "detect", None
 
 
@@ -194,26 +193,23 @@ def fix_label_line(line: str, task_type: str = "pose", kpt_shape: tuple[int, int
     if cls_id < 0:
         return "", [f"类别ID为负数: {cls_id}"]
 
-    # ===== detect 模式: 仅处理 bbox =====
-    if task_type == "detect":
+    if task_type in ("detect", "segment"):
         if len(parts) < bbox_end:
             return "", [f"列数不足: {len(parts)} < {bbox_end}"]
 
         try:
             cx = float(parts[1])
             cy = float(parts[2])
-            w  = float(parts[3])
-            h  = float(parts[4])
+            w = float(parts[3])
+            h = float(parts[4])
         except ValueError:
             return "", ["bbox 格式错误"]
 
-        # 裁剪 bbox 到 [0,1]
         x1 = max(0.0, min(1.0, cx - w / 2.0))
         y1 = max(0.0, min(1.0, cy - h / 2.0))
         x2 = max(0.0, min(1.0, cx + w / 2.0))
         y2 = max(0.0, min(1.0, cy + h / 2.0))
 
-        # 处理极小框
         eps = 1e-4
         if x2 <= x1:
             x2 = min(1.0, x1 + eps)
@@ -226,10 +222,22 @@ def fix_label_line(line: str, task_type: str = "pose", kpt_shape: tuple[int, int
 
         cx = (x1 + x2) / 2.0
         cy = (y1 + y2) / 2.0
-        w  = x2 - x1
-        h  = y2 - y1
+        w = x2 - x1
+        h = y2 - y1
 
         out = [str(cls_id), f"{cx:.6f}", f"{cy:.6f}", f"{w:.6f}", f"{h:.6f}"]
+
+        if task_type == "segment" and len(parts) > bbox_end:
+            seg_coords = []
+            for i in range(bbox_end, len(parts)):
+                try:
+                    v = float(parts[i])
+                    v = max(0.0, min(1.0, v))
+                    seg_coords.append(f"{v:.6f}")
+                except ValueError:
+                    continue
+            out.extend(seg_coords)
+
         return " ".join(out), []
 
     # ===== pose 模式: 处理关键点 + bbox =====
@@ -268,39 +276,47 @@ def fix_label_line(line: str, task_type: str = "pose", kpt_shape: tuple[int, int
 
         kpts.append((x, y, int(v)))
 
-    # 2. 仅用可见关键点 (v>0) 重新计算外接矩形
+    try:
+        orig_cx = float(parts[1])
+        orig_cy = float(parts[2])
+        orig_w = float(parts[3])
+        orig_h = float(parts[4])
+        orig_x1 = orig_cx - orig_w / 2.0
+        orig_y1 = orig_cy - orig_h / 2.0
+        orig_x2 = orig_cx + orig_w / 2.0
+        orig_y2 = orig_cy + orig_h / 2.0
+    except (ValueError, IndexError):
+        return "", ["原始 bbox 格式错误"]
+
     visible_kpts = [(x, y) for x, y, v in kpts if v > 0]
     if visible_kpts:
         x_coords = [k[0] for k in visible_kpts]
         y_coords = [k[1] for k in visible_kpts]
     else:
-        # 全部不可见时回退到所有点
         x_coords = [k[0] for k in kpts]
         y_coords = [k[1] for k in kpts]
-    
-    x_min = min(x_coords)
-    x_max = max(x_coords)
-    y_min = min(y_coords)
-    y_max = max(y_coords)
-    
-    # 4. 将边界框也裁剪到 [0, 1] 范围
+
+    x_min = min(min(x_coords), orig_x1)
+    x_max = max(max(x_coords), orig_x2)
+    y_min = min(min(y_coords), orig_y1)
+    y_max = max(max(y_coords), orig_y2)
+
     x_min = max(0.0, x_min)
     x_max = min(1.0, x_max)
     y_min = max(0.0, y_min)
     y_max = min(1.0, y_max)
-    
-    # 5. 处理极小框 (防止 w=0 或 h=0 导致 YOLO 训练报错)
+
     eps = 1e-4
     if x_max <= x_min:
         x_max = min(1.0, x_min + eps)
         if x_max <= x_min:
-            x_min = x_max - eps
+            x_min = max(0.0, x_max - eps)
         warnings.append("框宽度为0，已调整为极小值")
-        
+
     if y_max <= y_min:
         y_max = min(1.0, y_min + eps)
         if y_max <= y_min:
-            y_min = y_max - eps
+            y_min = max(0.0, y_max - eps)
         warnings.append("框高度为0，已调整为极小值")
 
     # 重新计算 cx, cy, w, h
@@ -382,6 +398,8 @@ def main():
     parser.add_argument("--kpt-shape", type=int, nargs=2, default=None,
                         metavar=("N_KPT", "N_DIM"),
                         help="手动指定关键点配置 (如: 4 3)，仅pose模式有效，auto模式覆盖自动检测")
+    parser.add_argument("--classes", type=str, nargs="+", default=None,
+                        help="类别名称列表 (如: --classes person car dog)，默认使用 class_0 class_1 ...")
 
     args = parser.parse_args()
 
@@ -467,9 +485,6 @@ def main():
         (output / "images" / split).mkdir(parents=True, exist_ok=True)
         (output / "labels" / split).mkdir(parents=True, exist_ok=True)
 
-    train_list_file = open(output / "train.txt", "w", encoding="utf-8")
-    val_list_file = open(output / "val.txt", "w", encoding="utf-8")
-
     total_written = 0
     total_skipped = 0
     total_warns = 0
@@ -500,11 +515,10 @@ def main():
             list_file.write(f"{dst_img.resolve()}\n")
             dst_txt.touch()
 
-    process_split(train_pairs, empty_train, "train", train_list_file)
-    process_split(val_pairs, empty_val, "val", val_list_file)
-
-    train_list_file.close()
-    val_list_file.close()
+    with open(output / "train.txt", "w", encoding="utf-8") as train_list_file, \
+         open(output / "val.txt", "w", encoding="utf-8") as val_list_file:
+        process_split(train_pairs, empty_train, "train", train_list_file)
+        process_split(val_pairs, empty_val, "val", val_list_file)
 
     print("\n" + "=" * 60)
     print("数据集准备完成!")
@@ -535,9 +549,24 @@ val: images/val    # val images
     if task_type == "pose":
         yaml_content += f"# Keypoints\nkpt_shape: {kpt_shape}  # number of keypoints, number of dims (2 for x,y or 3 for x,y,visibility)\n\n"
 
+    if args.classes:
+        names_lines = "\n".join(f"  {i}: {name}" for i, name in enumerate(args.classes))
+    else:
+        max_cls = 0
+        for txt_path, _ in all_pairs[:100]:
+            try:
+                with open(txt_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        parts = line.strip().split()
+                        if parts:
+                            max_cls = max(max_cls, int(parts[0]))
+            except Exception:
+                continue
+        names_lines = "\n".join(f"  {i}: class_{i}" for i in range(max_cls + 1))
+
     yaml_content += f"""# Classes
 names:
-  0: parking_slot
+{names_lines}
 """
 
     yaml_path = output / "dataset.yaml"

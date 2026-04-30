@@ -84,15 +84,19 @@ class ImageResult:
             ]
         else:
             result["num_detections"] = len(self.detections)
-            result["detections"] = [
-                {
+            result["detections"] = []
+            for d in self.detections:
+                det_dict = {
                     "bbox": d.bbox,
                     "confidence": round(d.confidence, 4),
                     "class_id": d.class_id,
                     "class_name": d.class_name,
                 }
-                for d in self.detections
-            ]
+                if d.mask is not None:
+                    det_dict["mask"] = d.mask.tolist()
+                if d.keypoints is not None:
+                    det_dict["keypoints"] = d.keypoints
+                result["detections"].append(det_dict)
 
         if self.task_type == "obb" and self.obb_boxes:
             result["obb"] = self.obb_boxes
@@ -205,101 +209,50 @@ class YOLOInference:
         self._load_onnx_classes()
 
     def _load_onnx_classes(self):
-        """Load class names for ONNX model."""
+        """Load class names for ONNX model from metadata.
+
+        Parses class names from ONNX metadata. Supports both JSON-encoded names
+        and Python dict string representation (as used by ultralytics exports).
+        Falls back to empty dict for models without metadata.
+        """
+        import ast
+
+        self.task_type = "detect"  # Default, may be updated from metadata
+
         # Try to get from model metadata
         if self.ort_session:
             metadata = self.ort_session.get_modelmeta()
-            if metadata and "names" in metadata.custom_metadata_map:
-                try:
-                    names = json.loads(metadata.custom_metadata_map["names"])
-                    self.classes = {int(k): v for k, v in names.items()}
-                    return
-                except (json.JSONDecodeError, ValueError):
-                    pass
+            if metadata and hasattr(metadata, 'custom_metadata_map'):
+                custom_meta = metadata.custom_metadata_map
 
-        # Default to COCO classes
-        self.classes = {
-            0: "person",
-            1: "bicycle",
-            2: "car",
-            3: "motorcycle",
-            4: "airplane",
-            5: "bus",
-            6: "train",
-            7: "truck",
-            8: "boat",
-            9: "traffic light",
-            10: "fire hydrant",
-            11: "stop sign",
-            12: "parking meter",
-            13: "bench",
-            14: "bird",
-            15: "cat",
-            16: "dog",
-            17: "horse",
-            18: "sheep",
-            19: "cow",
-            20: "elephant",
-            21: "bear",
-            22: "zebra",
-            23: "giraffe",
-            24: "backpack",
-            25: "umbrella",
-            26: "handbag",
-            27: "tie",
-            28: "suitcase",
-            29: "frisbee",
-            30: "skis",
-            31: "snowboard",
-            32: "sports ball",
-            33: "kite",
-            34: "baseball bat",
-            35: "baseball glove",
-            36: "skateboard",
-            37: "surfboard",
-            38: "tennis racket",
-            39: "bottle",
-            40: "wine glass",
-            41: "cup",
-            42: "fork",
-            43: "knife",
-            44: "spoon",
-            45: "bowl",
-            46: "banana",
-            47: "apple",
-            48: "sandwich",
-            49: "orange",
-            50: "broccoli",
-            51: "carrot",
-            52: "hot dog",
-            53: "pizza",
-            54: "donut",
-            55: "cake",
-            56: "chair",
-            57: "couch",
-            58: "potted plant",
-            59: "bed",
-            60: "dining table",
-            61: "toilet",
-            62: "tv",
-            63: "laptop",
-            64: "mouse",
-            65: "remote",
-            66: "keyboard",
-            67: "cell phone",
-            68: "microwave",
-            69: "oven",
-            70: "toaster",
-            71: "sink",
-            72: "refrigerator",
-            73: "book",
-            74: "clock",
-            75: "vase",
-            76: "scissors",
-            77: "teddy bear",
-            78: "hair drier",
-            79: "toothbrush",
-        }
+                # Parse task type if available
+                if "task" in custom_meta:
+                    task = custom_meta["task"]
+                    if task in {"detect", "segment", "classify", "pose", "obb"}:
+                        self.task_type = task
+
+                # Parse class names
+                if "names" in custom_meta:
+                    names_str = custom_meta["names"]
+                    try:
+                        # Try JSON first
+                        names = json.loads(names_str)
+                        self.classes = {int(k): v for k, v in names.items()}
+                        return
+                    except (json.JSONDecodeError, ValueError):
+                        pass
+
+                    # Try Python literal syntax (used by ultralytics)
+                    try:
+                        names = ast.literal_eval(names_str)
+                        if isinstance(names, dict):
+                            self.classes = {int(k): v for k, v in names.items()}
+                            return
+                    except (ValueError, SyntaxError):
+                        pass
+
+        # No metadata found - classes will be empty, user should provide via config
+        self.classes = {}
 
     def letterbox(
         self, img: np.ndarray, new_shape: Tuple[int, int] = (640, 640)
@@ -340,91 +293,100 @@ class YOLOInference:
     def postprocess_onnx(
         self, outputs: np.ndarray, orig_shape: Tuple[int, int], pad: Tuple[int, int], r: float
     ) -> List[DetectionResult]:
-        """Postprocess ONNX model outputs with NMS."""
-        # outputs shape: (1, num_detections, 4 + num_classes) or (1, 4 + num_classes, num_detections)
-        outputs = np.squeeze(outputs[0])
+        """Postprocess ONNX model outputs with NMS.
 
-        # Handle transposed output
-        if outputs.shape[0] > outputs.shape[1]:
-            outputs = np.transpose(outputs)
+        Handles both:
+        - Standard YOLO output: (batch, 4 + num_classes, num_detections) or (batch, num_detections, 4 + num_classes)
+        - NMS-embedded output: (batch, num_detections, 6) with [x1, y1, x2, y2, conf, class_id]
+        """
+        # Handle list of outputs (multiple outputs from some models)
+        if isinstance(outputs, (list, tuple)):
+            output = outputs[0]
+        else:
+            output = outputs
+
+        output = np.squeeze(output)
+
+        # Detect output format
+        if output.ndim == 1:
+            return []
+
+        # Handle different transpositions
+        if output.shape[0] <= 6 and output.shape[0] < output.shape[-1]:
+            output = np.transpose(output)
 
         detections = []
+        orig_h, orig_w = orig_shape
 
-        # Get boxes and scores
-        boxes = outputs[:, :4]
-        scores = outputs[:, 4:]
+        # Check if NMS is already embedded (shape: N, 6 with [x1,y1,x2,y2,conf,cls])
+        if output.shape[1] == 6:
+            for det in output:
+                conf = float(det[4])
+                if conf < self.nms_config.conf_threshold:
+                    continue
+                class_id = int(det[5])
+                x1, y1, x2, y2 = det[:4]
+
+                # Remove padding and scale
+                x1 = max(0, min((x1 - pad[1]) / r, orig_w))
+                y1 = max(0, min((y1 - pad[0]) / r, orig_h))
+                x2 = max(0, min((x2 - pad[1]) / r, orig_w))
+                y2 = max(0, min((y2 - pad[0]) / r, orig_h))
+
+                class_name = self.classes.get(class_id, f"class_{class_id}")
+                detections.append(
+                    DetectionResult(
+                        bbox=[float(x1), float(y1), float(x2), float(y2)],
+                        confidence=conf,
+                        class_id=class_id,
+                        class_name=class_name,
+                    )
+                )
+                if len(detections) >= self.nms_config.max_detections:
+                    break
+            return detections
+
+        # Standard YOLO output: boxes + scores
+        boxes = output[:, :4]
+        scores = output[:, 4:]
 
         # Get max class scores
-        class_ids = np.argmax(scores, axis=1)
-        confidences = np.max(scores, axis=1)
+        if scores.ndim > 1 and scores.shape[1] > 0:
+            class_ids = np.argmax(scores, axis=1)
+            confidences = np.max(scores, axis=1)
+        else:
+            return []
 
         # Filter by confidence threshold
-        mask = confidences >= self.nms_config.conf_threshold
-        boxes = boxes[mask]
-        confidences = confidences[mask]
-        class_ids = class_ids[mask]
+        conf_mask = confidences >= self.nms_config.conf_threshold
+        boxes = boxes[conf_mask]
+        confidences = confidences[conf_mask]
+        class_ids = class_ids[conf_mask]
 
         if len(boxes) == 0:
             return []
 
-        # Convert boxes from center format to corner format
-        boxes_xyxy = np.zeros_like(boxes)
-        boxes_xyxy[:, 0] = boxes[:, 0] - boxes[:, 2] / 2  # x1
-        boxes_xyxy[:, 1] = boxes[:, 1] - boxes[:, 3] / 2  # y1
-        boxes_xyxy[:, 2] = boxes[:, 0] + boxes[:, 2] / 2  # x2
-        boxes_xyxy[:, 3] = boxes[:, 1] + boxes[:, 3] / 2  # y2
+        # Auto-detect box format (center vs corner)
+        # If values are mostly in [0, 1], could be normalized corners
+        # If values seem larger than image size, could be center format with width/height
+        boxes_xyxy = self._convert_boxes_to_xyxy(boxes)
 
-        # Apply NMS
-        if self.nms_config.agnostic:
-            # Class-agnostic NMS
-            indices = cv2.dnn.NMSBoxes(
-                boxes_xyxy.tolist(),
-                confidences.tolist(),
-                self.nms_config.conf_threshold,
-                self.nms_config.iou_threshold,
-            )
-            indices = np.array(indices).flatten()
-        else:
-            # Class-specific NMS
-            indices = []
-            for class_id in np.unique(class_ids):
-                class_mask = class_ids == class_id
-                class_boxes = boxes_xyxy[class_mask]
-                class_confidences = confidences[class_mask]
-
-                class_indices = cv2.dnn.NMSBoxes(
-                    class_boxes.tolist(),
-                    class_confidences.tolist(),
-                    self.nms_config.conf_threshold,
-                    self.nms_config.iou_threshold,
-                )
-                class_indices = np.array(class_indices).flatten()
-                indices.extend(np.where(class_mask)[0][class_indices].tolist())
-            indices = np.array(indices)
+        # Apply NMS with OpenCV version compatibility
+        indices = self._apply_nms(boxes_xyxy, confidences, class_ids)
 
         # Limit detections
         if len(indices) > self.nms_config.max_detections:
-            # Sort by confidence and take top detections
             sorted_indices = np.argsort(confidences[indices])[::-1]
             indices = indices[sorted_indices[: self.nms_config.max_detections]]
-
-        # Scale boxes back to original image coordinates
-        orig_h, orig_w = orig_shape
 
         for idx in indices:
             x1, y1, x2, y2 = boxes_xyxy[idx]
 
             # Remove padding and scale
-            x1 = (x1 - pad[1]) / r
-            y1 = (y1 - pad[0]) / r
-            x2 = (x2 - pad[1]) / r
-            y2 = (y2 - pad[0]) / r
-
-            # Clip to image bounds
-            x1 = max(0, min(x1, orig_w))
-            y1 = max(0, min(y1, orig_h))
-            x2 = max(0, min(x2, orig_w))
-            y2 = max(0, min(y2, orig_h))
+            x1 = max(0, min((x1 - pad[1]) / r, orig_w))
+            y1 = max(0, min((y1 - pad[0]) / r, orig_h))
+            x2 = max(0, min((x2 - pad[1]) / r, orig_w))
+            y2 = max(0, min((y2 - pad[0]) / r, orig_h))
 
             class_id = int(class_ids[idx])
             class_name = self.classes.get(class_id, f"class_{class_id}")
@@ -439,6 +401,83 @@ class YOLOInference:
             )
 
         return detections
+
+    def _convert_boxes_to_xyxy(self, boxes: np.ndarray) -> np.ndarray:
+        """Convert boxes from center format to corner format if needed.
+
+        Auto-detects format based on value ranges:
+        - If all values are in [0, 1], assume normalized xyxy (already corners)
+        - Otherwise, assume cx, cy, w, h format and convert
+        """
+        boxes = boxes.copy()
+
+        # Heuristic: if all values are within [0, 1.5], likely already xyxy
+        # (allowing slight overflow from model output)
+        if np.all((boxes >= 0) & (boxes <= 1.5)):
+            # Could be normalized xyxy, clip to [0, 1]
+            boxes = np.clip(boxes, 0.0, 1.0)
+            # Scale to input dimensions
+            boxes[:, [0, 2]] *= self.input_width
+            boxes[:, [1, 3]] *= self.input_height
+            return boxes
+
+        # Assume cx, cy, w, h format
+        xyxy = np.zeros_like(boxes)
+        xyxy[:, 0] = boxes[:, 0] - boxes[:, 2] / 2.0  # x1
+        xyxy[:, 1] = boxes[:, 1] - boxes[:, 3] / 2.0  # y1
+        xyxy[:, 2] = boxes[:, 0] + boxes[:, 2] / 2.0  # x2
+        xyxy[:, 3] = boxes[:, 1] + boxes[:, 3] / 2.0  # y2
+        return xyxy
+
+    def _apply_nms(
+        self, boxes: np.ndarray, confidences: np.ndarray, class_ids: np.ndarray
+    ) -> np.ndarray:
+        """Apply NMS with OpenCV version compatibility.
+
+        Handles different return formats across OpenCV versions:
+        - OpenCV < 4.5.4: returns list of lists [[0], [1], ...]
+        - OpenCV >= 4.5.4: returns ndarray or tuple
+        """
+        if self.nms_config.agnostic:
+            indices = cv2.dnn.NMSBoxes(
+                boxes.tolist(),
+                confidences.tolist(),
+                self.nms_config.conf_threshold,
+                self.nms_config.iou_threshold,
+            )
+            return self._normalize_nms_indices(indices)
+
+        # Class-specific NMS
+        all_indices = []
+        for class_id in np.unique(class_ids):
+            class_mask = class_ids == class_id
+            class_boxes = boxes[class_mask]
+            class_confidences = confidences[class_mask]
+
+            indices = cv2.dnn.NMSBoxes(
+                class_boxes.tolist(),
+                class_confidences.tolist(),
+                self.nms_config.conf_threshold,
+                self.nms_config.iou_threshold,
+            )
+            normalized = self._normalize_nms_indices(indices)
+            all_indices.extend(np.where(class_mask)[0][normalized].tolist())
+
+        return np.array(all_indices, dtype=np.int64)
+
+    @staticmethod
+    def _normalize_nms_indices(indices) -> np.ndarray:
+        """Normalize NMS indices to 1D numpy array regardless of OpenCV version."""
+        if indices is None or len(indices) == 0:
+            return np.array([], dtype=np.int64)
+
+        if isinstance(indices, tuple):
+            indices = indices[0] if len(indices) > 0 else np.array([])
+
+        arr = np.array(indices)
+        if arr.ndim > 1:
+            arr = arr.flatten()
+        return arr.astype(np.int64)
 
     def _detect_task_type(self) -> str:
         """Detect task type from model."""
@@ -499,7 +538,11 @@ class YOLOInference:
                 obb_boxes = []
                 for i in range(len(result.obb)):
                     box = result.obb[i]
-                    xyxyxyxy = box.xyxyxyxy.squeeze().cpu().numpy()  # 8 points
+                    xyxyxyxy = box.xyxyxyxy.cpu().numpy()
+                    if xyxyxyxy.ndim > 2:
+                        xyxyxyxy = xyxyxyxy.squeeze()
+                    if xyxyxyxy.ndim == 1:
+                        xyxyxyxy = xyxyxyxy.reshape(4, 2)
                     conf = float(box.conf.cpu().numpy())
                     class_id = int(box.cls.cpu().numpy())
                     class_name = self.classes.get(class_id, f"class_{class_id}")
@@ -592,7 +635,7 @@ class YOLOInference:
             image_path="array",
             image_shape=orig_shape,
             detections=detections,
-            task_type="detect",  # ONNX doesn't easily support task detection
+            task_type=self.task_type,
         )
 
     def __call__(self, image: Union[str, np.ndarray]) -> ImageResult:
@@ -605,8 +648,6 @@ class YOLOInference:
                 raise ValueError(f"Failed to load image: {image_path}")
         else:
             image_path = "array"
-
-        image_shape = image.shape[:2]
 
         # Run inference
         start_time = time.perf_counter()
@@ -776,7 +817,6 @@ class YOLOInference:
     def inference_batch(self, images: List[np.ndarray]) -> List[ImageResult]:
         """Run batch inference on multiple images."""
         if self.model_format == "onnx":
-            # ONNX doesn't support batch easily, fall back to sequential
             results = []
             for img in images:
                 results.append(self.inference_onnx(img))
@@ -886,20 +926,14 @@ def draw_detections(
 
         return output
 
-    # Create overlay for masks
-    overlay = output.copy()
-
     for det in result.detections:
         x1, y1, x2, y2 = [int(v) for v in det.bbox]
         class_id = det.class_id
         color = tuple(int(c) for c in colors[class_id % len(colors)])
 
-        # Draw segmentation mask
         if det.mask is not None:
             mask = det.mask.astype(bool)
-            # Fill mask with color
-            output[mask] = output[mask] * (1 - mask_alpha) + np.array(color) * mask_alpha
-            # Draw mask contour
+            output[mask] = (output[mask] * (1 - mask_alpha) + np.array(color) * mask_alpha).astype(np.uint8)
             contours, _ = cv2.findContours(det.mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             cv2.drawContours(output, contours, -1, color, box_thickness)
 
@@ -956,20 +990,25 @@ def draw_detections(
                 vis = _get_vis(kpt, kidx)
 
                 if vis == 2:
-                    # Visible: solid filled circle in green with white border
                     cv2.circle(output, (x, y), kpt_radius, VIS_COLOR_GREEN, -1)
                     cv2.circle(output, (x, y), kpt_radius, (255, 255, 255), 1)
                 elif vis == 1:
-                    # Occluded: filled circle in orange with X mark
                     cv2.circle(output, (x, y), kpt_radius, VIS_COLOR_ORANGE, -1)
                     cv2.circle(output, (x, y), kpt_radius, (255, 255, 255), 1)
-                    # Draw X mark inside
                     r = max(2, kpt_radius - 2)
                     cv2.line(output, (x - r, y - r), (x + r, y + r), (255, 255, 255), 1)
                     cv2.line(output, (x - r, y + r), (x + r, y - r), (255, 255, 255), 1)
                 else:
-                    # Not labeled: hollow circle (ring only) in gray
                     cv2.circle(output, (x, y), kpt_radius, VIS_COLOR_GRAY, 1)
+
+                if kpt_names and class_id in kpt_names and kidx < len(kpt_names[class_id]):
+                    name = str(kpt_names[class_id][kidx])
+                    txt = f"{kidx}:{name}"
+                    (tw, th), _ = cv2.getTextSize(txt, cv2.FONT_HERSHEY_SIMPLEX, font_scale * 0.7, 1)
+                    tx = min(x + kpt_radius + 2, output.shape[1] - tw - 2)
+                    ty = max(y - kpt_radius - 2, th + 2)
+                    cv2.putText(output, txt, (tx, ty), cv2.FONT_HERSHEY_SIMPLEX,
+                               font_scale * 0.7, (255, 255, 255), 1, cv2.LINE_AA)
 
         # Draw label (skip for pose when keypoints are drawn)
         if show_labels and det.keypoints is None:
@@ -1060,7 +1099,6 @@ def inference_video(
         video_out_path = output_path / f"{input_path.stem}_annotated{input_path.suffix if codec == 'mp4v' else '.mp4'}"
         writer = cv2.VideoWriter(str(video_out_path), fourcc, out_fps, (src_w, src_h))
         if not writer.isOpened():
-            # Fallback to mp4v if requested codec fails
             fourcc = cv2.VideoWriter_fourcc(*"mp4v")
             video_out_path = output_path / f"{input_path.stem}_annotated.mp4"
             writer = cv2.VideoWriter(str(video_out_path), fourcc, out_fps, (src_w, src_h))
@@ -1072,37 +1110,40 @@ def inference_video(
     all_results = []
     frame_idx = 0
 
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
+    try:
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
 
-        result = engine(frame)
-        result.image_path = f"{input_path.name}#frame{frame_idx}"
-        all_results.append(result)
+            result = engine(frame)
+            result.image_path = f"{input_path.name}#frame{frame_idx}"
+            all_results.append(result)
 
-        if save_vis and writer is not None:
-            vis = draw_detections(
-                frame,
-                result,
-                engine.classes,
-                box_thickness=vis_cfg.get("box_thickness", args.box_thickness) if vis_cfg else args.box_thickness,
-                font_scale=vis_cfg.get("font_scale", args.font_scale) if vis_cfg else args.font_scale,
-                show_labels=vis_cfg.get("show_labels", args.show_labels) if vis_cfg else args.show_labels,
-                show_conf=vis_cfg.get("show_conf", args.show_conf) if vis_cfg else args.show_conf,
-                skeleton=skeleton,
-                kpt_names=kpt_names,
-            )
-            writer.write(vis)
+            if save_vis and writer is not None:
+                vis = draw_detections(
+                    frame,
+                    result,
+                    engine.classes,
+                    box_thickness=vis_cfg.get("box_thickness", args.box_thickness) if vis_cfg else args.box_thickness,
+                    font_scale=vis_cfg.get("font_scale", args.font_scale) if vis_cfg else args.font_scale,
+                    show_labels=vis_cfg.get("show_labels", args.show_labels) if vis_cfg else args.show_labels,
+                    show_conf=vis_cfg.get("show_conf", args.show_conf) if vis_cfg else args.show_conf,
+                    skeleton=skeleton,
+                    kpt_names=kpt_names,
+                )
+                writer.write(vis)
 
-        if verbose:
-            print(f"  Frame {frame_idx+1}/{total_frames}: {len(result.detections)} detections, {result.inference_time*1000:.1f}ms")
+            if verbose:
+                print(f"  Frame {frame_idx+1}/{total_frames}: {len(result.detections)} detections, {result.inference_time*1000:.1f}ms")
 
-        frame_idx += 1
+            frame_idx += 1
 
-    cap.release()
-    if writer:
-        writer.release()
+    finally:
+        if cap is not None:
+            cap.release()
+        if writer is not None and writer.isOpened():
+            writer.release()
 
     # Save JSON results
     if save_json:
@@ -1246,8 +1287,25 @@ Examples:
 
 
 def main():
+    import traceback
+
     args = parse_args()
 
+    try:
+        _run_inference(args)
+    except KeyboardInterrupt:
+        print("\nInference interrupted by user.")
+        sys.exit(130)
+    except Exception as e:
+        print(f"\n{'='*60}")
+        print(f"ERROR: {e}")
+        print(f"{'='*60}")
+        if args.verbose:
+            traceback.print_exc()
+        sys.exit(1)
+
+
+def _run_inference(args):
     # Load config file if specified
     config = {}
     if args.config:
@@ -1297,7 +1355,7 @@ def main():
     print(f"Device: {device}")
     print(f"Image size: {imgsz}")
     print(f"Batch size: {batch_size}")
-    print(f"NMS Config:")
+    print("NMS Config:")
     print(f"  - Confidence threshold: {nms_config.conf_threshold}")
     print(f"  - IoU threshold: {nms_config.iou_threshold}")
     print(f"  - Max detections: {nms_config.max_detections}")
@@ -1544,9 +1602,7 @@ def main():
             continue
 
         # Run batch inference
-        start_time = time.perf_counter()
         batch_results = engine.inference_batch(batch_images)
-        batch_time = time.perf_counter() - start_time
 
         # Process and save results
         for result, image_file, image in zip(batch_results, valid_files, batch_images):
