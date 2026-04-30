@@ -16,9 +16,9 @@ data:
 
 # Training
 train:
-  epochs: 600
+  epochs: 500
   time:  # max hours to train; overrides epochs if set
-  batch: 96 #for 16G
+  batch: 52 #for 16G
   imgsz: 640
   device: null
   workers: 8
@@ -31,10 +31,10 @@ train:
   single_cls: false
   fraction: 1.0
   freeze:  # freeze first N layers, e.g. 10
-  multi_scale: 0.5
+  multi_scale: 0.3
   compile: false
   end2end:  # important for YOLO26
-  nbs: 96
+  nbs: 52
   profile: false
 
   # Optimizer
@@ -57,7 +57,7 @@ train:
   dfl: 1.5
 
   # Training control
-  close_mosaic: 15  # disable mosaic for last N epochs
+  close_mosaic: 50
   seed: 0           # random seed for reproducibility
   deterministic: true  # enable deterministic mode
 
@@ -72,8 +72,8 @@ augmentation:
   hsv_s: 0.7
   hsv_v: 0.4
   degrees: 5.0
-  translate: 0.2
-  scale: 0.95
+  translate: 0.15
+  scale: 0.8
   shear: 3.0
   perspective: 0.0
   flipud: 0.0
@@ -82,7 +82,7 @@ augmentation:
   mosaic: 1.0
   mixup: 0.05
   cutmix: 0.0
-  copy_paste: 0.2
+  copy_paste: 0.0
   copy_paste_mode: flip
   auto_augment: randaugment
   erasing: 0.4
