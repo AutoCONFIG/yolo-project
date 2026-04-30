@@ -1,0 +1,20 @@
+# OBB Dataset Configuration
+# ==========================
+# Oriented bounding box dataset configuration for YOLO training.
+# Labels must be in YOLO OBB format: <class> <x1> <y1> <x2> <y2> <x3> <y3> <x4> <y4>
+# where (x1,y1)...(x4,y4) are the four corner points of the rotated bounding box.
+
+path: ../datasets/obb_example
+
+train: images/train
+val: images/val
+test: images/test
+
+names:
+  0: plane
+  1: ship
+  2: storage tank
+  3: vehicle
+
+# Optional: Download script/URL for auto-download
+# download: https://example.com/obb_dataset.zip

@@ -1,0 +1,25 @@
+# Classification Dataset Configuration
+# =====================================
+# Image classification dataset configuration for YOLO training.
+# Dataset must follow ImageFolder structure:
+#   dataset_root/
+#     train/
+#       class_a/     # images of class_a
+#       class_b/     # images of class_b
+#     val/
+#       class_a/
+#       class_b/
+
+path: ../datasets/classify_example
+
+train: train
+val: val
+test:
+
+names:
+  0: cat
+  1: dog
+  2: bird
+
+# Optional: Download script/URL for auto-download
+# download: https://example.com/classify_dataset.zip

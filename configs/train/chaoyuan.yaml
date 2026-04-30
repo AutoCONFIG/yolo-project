@@ -1,0 +1,113 @@
+# YOLO Detection Training Configuration - Chaoyuan
+# =================================================
+
+mode: train
+
+# Model: 从YAML构建网络，从头训练（自动适配 nc）
+model:
+  name: yolo26n.yaml
+  pretrained: False
+  task: detect  # detect/segment/classify/pose/obb
+
+# Data
+data:
+  config: configs/datasets/chaoyuan.yaml
+  split: val
+
+# Training
+train:
+  epochs: 600
+  time:  # max hours to train; overrides epochs if set
+  batch: 96 #for 16G
+  imgsz: 640
+  device: null
+  workers: 8
+  resume: false
+  patience: 50
+  cache: disk  # True/'ram'/'disk'/False - RAM缓存加速数据读取
+  save: True
+  amp: True
+  rect: false
+  single_cls: false
+  fraction: 1.0
+  freeze:  # freeze first N layers, e.g. 10
+  multi_scale: 0.5
+  compile: false
+  end2end:  # important for YOLO26
+  nbs: 96
+  profile: false
+
+  # Optimizer
+  optimizer: AdamW
+  lr0: 0.01
+  lrf: 0.001
+  momentum: 0.937
+  weight_decay: 0.001
+  cos_lr: true
+
+  # Warmup
+  warmup_epochs: 3.0
+  warmup_momentum: 0.8
+  warmup_bias_lr: 0.1
+
+  # Loss gains
+  box: 8.5
+  cls: 0.5
+  cls_pw: 0.0  # class weights power for imbalance
+  dfl: 1.5
+
+  # Training control
+  close_mosaic: 15  # disable mosaic for last N epochs
+  seed: 0           # random seed for reproducibility
+  deterministic: true  # enable deterministic mode
+
+  # Task-specific (segment only)
+  dropout: 0.0
+  overlap_mask: true
+  mask_ratio: 4
+
+# Augmentation
+augmentation:
+  hsv_h: 0.015
+  hsv_s: 0.7
+  hsv_v: 0.4
+  degrees: 5.0
+  translate: 0.2
+  scale: 0.95
+  shear: 3.0
+  perspective: 0.0
+  flipud: 0.0
+  fliplr: 0.5
+  bgr: 0.0
+  mosaic: 1.0
+  mixup: 0.05
+  cutmix: 0.0
+  copy_paste: 0.2
+  copy_paste_mode: flip
+  auto_augment: randaugment
+  erasing: 0.4
+
+# Validation
+validation:
+  val: true
+  conf: 0.25
+  iou: 0.7
+  max_det: 300
+  half: false
+  plots: true
+  save_json: false
+  dnn: false
+  agnostic_nms: false
+  augment: false
+
+# Misc
+cfg:
+tracker: botsort.yaml
+
+# Output
+output:
+  project: ../../../runs
+  name: chaoyuan
+  save_period: -1
+  exist_ok: false
+  verbose: true

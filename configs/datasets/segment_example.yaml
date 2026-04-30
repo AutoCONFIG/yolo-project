@@ -1,0 +1,20 @@
+# Segmentation Dataset Configuration
+# ===================================
+# Instance segmentation dataset configuration for YOLO training.
+# Labels must be in YOLO segmentation format: <class> <x1> <y1> <x2> <y2> ... <xn> <yn>
+
+path: ../datasets/segment_example
+
+train: images/train
+val: images/val
+test: images/test
+
+names:
+  0: person
+  1: car
+  2: dog
+  3: cat
+  4: bicycle
+
+# Optional: Download script/URL for auto-download
+# download: https://example.com/segment_dataset.zip

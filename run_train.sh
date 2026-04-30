@@ -14,9 +14,9 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-DEFAULT_CONFIG="${SCRIPT_DIR}/configs/default.yaml"
+DEFAULT_CONFIG="${SCRIPT_DIR}/configs/train/train_example.yaml"
 
-CONFIG_FILE=""
+CONFIG_FILE="${SCRIPT_DIR}/configs/train/chaoyuan.yaml"
 EXTRA_ARGS=()
 
 while [[ $# -gt 0 ]]; do

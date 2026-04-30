@@ -57,16 +57,17 @@ Usage:
 """
 
 import argparse
+import os
 import random
 import shutil
 from pathlib import Path
 
 # ========== 可修改的默认参数 ==========
-DEFAULT_SOURCE = "./data/raw"
-DEFAULT_OUTPUT = "./datasets/prepared"
+DEFAULT_SOURCE = "/media/yun/de2a43ce-446c-4a62-99b3-8ddc6ea1ef87/datasets/source/chaoyuan"
+DEFAULT_OUTPUT = "/media/yun/de2a43ce-446c-4a62-99b3-8ddc6ea1ef87/datasets/chaoyuan"
 DEFAULT_VAL_RATIO = 0.2
 DEFAULT_SEED = 42
-DEFAULT_EMPTY_RATIO = 0.1  # 负样本比例 (0=不提取, 0.1=10%)
+DEFAULT_EMPTY_RATIO = 0  # 负样本比例 (0=不提取, 0.1=10%)
 # ======================================
 
 # 支持的图片格式
@@ -131,35 +132,36 @@ def detect_task_type(pairs: list[tuple[Path, Path]]) -> tuple[str, tuple[int, in
 
 def find_pairs_recursive(source_dir: Path) -> tuple[list[tuple[Path, Path]], list[Path]]:
     """
-    递归查找所有图片和对应的标签文件。
+    递归查找所有图片和对应的标签文件（使用 os.walk 替代 rglob，速度更快）。
     """
     labeled_pairs = []
     empty_images = []
 
-    for file in sorted(source_dir.rglob("*")):
-        if not file.is_file():
-            continue
+    for root, dirs, files in os.walk(source_dir):
+        file_set = set(files)
+        for f in files:
+            ext = os.path.splitext(f)[1].lower()
+            if ext not in IMG_EXTENSIONS:
+                continue
 
-        if file.suffix.lower() not in IMG_EXTENSIONS:
-            continue
+            img_path = Path(root) / f
+            txt_name = os.path.splitext(f)[0] + ".txt"
 
-        txt_file = file.with_suffix(".txt")
+            if txt_name not in file_set:
+                empty_images.append(img_path)
+                continue
 
-        if not txt_file.exists():
-            empty_images.append(file)
-            continue
+            txt_path = Path(root) / txt_name
+            if os.path.getsize(txt_path) == 0:
+                empty_images.append(img_path)
+                continue
 
-        if txt_file.stat().st_size == 0:
-            empty_images.append(file)
-            continue
+            with open(txt_path, "r", encoding="utf-8") as fh:
+                if not any(line.strip() for line in fh):
+                    empty_images.append(img_path)
+                    continue
 
-        with open(txt_file, "r", encoding="utf-8") as f:
-            has_content = any(line.strip() for line in f)
-
-        if has_content:
-            labeled_pairs.append((file, txt_file))
-        else:
-            empty_images.append(file)
+            labeled_pairs.append((img_path, txt_path))
 
     return labeled_pairs, empty_images
 
@@ -337,6 +339,26 @@ def fix_label_line(line: str, task_type: str = "pose", kpt_shape: tuple[int, int
     return " ".join(out), warnings
 
 
+def copy_or_link(src: Path, dst: Path, mode: str = "hard") -> None:
+    """
+    根据 mode 选择复制或链接方式：
+      hard = 硬链接（同文件系统，不占用额外空间，最快）
+      soft = 软链接/符号链接
+      copy = 完整复制（跨文件系统兼容）
+    """
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    if mode == "hard":
+        try:
+            os.link(src, dst)
+            return
+        except OSError:
+            pass  # 跨文件系统，回退到 copy
+    elif mode == "soft":
+        os.symlink(src.resolve(), dst)
+        return
+    shutil.copy2(src, dst)
+
+
 def process_label(src_txt: Path, dst_txt: Path, task_type: str = "pose", kpt_shape: tuple[int, int] | None = None) -> tuple[int, int, int]:
     """
     处理整个标签文件。
@@ -400,6 +422,8 @@ def main():
                         help="手动指定关键点配置 (如: 4 3)，仅pose模式有效，auto模式覆盖自动检测")
     parser.add_argument("--classes", type=str, nargs="+", default=None,
                         help="类别名称列表 (如: --classes person car dog)，默认使用 class_0 class_1 ...")
+    parser.add_argument("--link-mode", type=str, choices=["hard", "soft", "copy"], default="hard",
+                        help="文件复制方式: hard=硬链接(最快,同文件系统), soft=软链接, copy=完整复制(默认: hard)")
 
     args = parser.parse_args()
 
@@ -498,7 +522,7 @@ def main():
             dst_img = output / "images" / split_name / f"{safe_base}{suffix}"
             dst_txt = output / "labels" / split_name / f"{safe_base}.txt"
 
-            shutil.copy2(img_path, dst_img)
+            copy_or_link(img_path, dst_img, mode=args.link_mode)
             list_file.write(f"{dst_img.resolve()}\n")
 
             written, skipped, warns = process_label(txt_path, dst_txt, task_type=task_type, kpt_shape=kpt_shape)
@@ -511,7 +535,7 @@ def main():
             dst_img = output / "images" / split_name / f"{safe_base}{suffix}"
             dst_txt = output / "labels" / split_name / f"{safe_base}.txt"
 
-            shutil.copy2(img_path, dst_img)
+            copy_or_link(img_path, dst_img, mode=args.link_mode)
             list_file.write(f"{dst_img.resolve()}\n")
             dst_txt.touch()
 
