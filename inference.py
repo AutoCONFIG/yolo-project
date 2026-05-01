@@ -37,10 +37,6 @@ ULTRALYTICS_PATH = Path(__file__).parent / "ultralytics"
 if ULTRALYTICS_PATH.exists():
     sys.path.insert(0, str(ULTRALYTICS_PATH))
 
-# Patch ultralytics downloads to use weights_dir (must be before ultralytics imports)
-from utils.downloads import patch_ultralytics_downloads
-patch_ultralytics_downloads()
-
 import yaml
 
 
@@ -120,6 +116,144 @@ class NMSConfig:
         self.max_detections = max_detections
         self.agnostic = agnostic  # Class-agnostic NMS
         self.multi_label = multi_label  # Allow multiple labels per box
+
+
+def _parse_pytorch_result(result, classes: Dict[int, str], image_shape: Tuple[int, int]) -> ImageResult:
+    """Parse ultralytics Results object into ImageResult.
+
+    Handles all task types: classify, obb, segment, pose, detect.
+    Branch order: probs -> obb -> masks -> keypoints -> boxes
+    """
+    detections = []
+    probs = None
+    obb_boxes = None
+    task_type = "detect"
+
+    # Classification task
+    if result.probs is not None:
+        task_type = "classify"
+        probs = []
+        for idx in result.probs.top5:
+            class_name = classes.get(idx, f"class_{idx}")
+            prob = float(result.probs.data[idx])
+            probs.append((class_name, prob))
+
+    # OBB task
+    elif result.obb is not None:
+        task_type = "obb"
+        obb_boxes = []
+        for i in range(len(result.obb)):
+            box = result.obb[i]
+            xyxyxyxy = box.xyxyxyxy.cpu().numpy()
+            if xyxyxyxy.ndim > 2:
+                xyxyxyxy = xyxyxyxy.squeeze()
+            if xyxyxyxy.ndim == 1:
+                xyxyxyxy = xyxyxyxy.reshape(4, 2)
+            conf = float(box.conf.cpu().numpy())
+            class_id = int(box.cls.cpu().numpy())
+            class_name = classes.get(class_id, f"class_{class_id}")
+
+            # Also add as detection for compatibility
+            detections.append(
+                DetectionResult(
+                    bbox=box.xyxy.squeeze().cpu().numpy().tolist(),
+                    confidence=conf,
+                    class_id=class_id,
+                    class_name=class_name,
+                )
+            )
+            obb_boxes.append({
+                "points": xyxyxyxy.tolist(),
+                "confidence": conf,
+                "class_id": class_id,
+                "class_name": class_name,
+            })
+
+    # Segmentation task
+    elif result.masks is not None:
+        task_type = "segment"
+        for i in range(len(result.boxes)):
+            box = result.boxes[i]
+            x1, y1, x2, y2 = box.xyxy.squeeze().cpu().numpy().tolist()
+            conf = box.conf.cpu().numpy()
+            conf = float(conf.item() if conf.ndim == 0 else conf.squeeze())
+            class_id = int(box.cls.cpu().numpy().squeeze())
+            class_name = classes.get(class_id, f"class_{class_id}")
+
+            # Get mask
+            mask = None
+            if i < len(result.masks):
+                mask_tensor = result.masks[i].data
+                mask = mask_tensor.cpu().numpy().squeeze()
+                mask_h, mask_w = mask.shape
+                orig_h, orig_w = image_shape
+                if mask_h != orig_h or mask_w != orig_w:
+                    mask = cv2.resize(mask.astype(np.uint8), (orig_w, orig_h), interpolation=cv2.INTER_NEAREST)
+
+            detections.append(
+                DetectionResult(
+                    bbox=[x1, y1, x2, y2],
+                    confidence=conf,
+                    class_id=class_id,
+                    class_name=class_name,
+                    mask=mask,
+                )
+            )
+
+    # Pose task
+    elif result.keypoints is not None:
+        task_type = "pose"
+        for i in range(len(result.boxes)):
+            box = result.boxes[i]
+            x1, y1, x2, y2 = box.xyxy.squeeze().cpu().numpy().tolist()
+            conf = box.conf.cpu().numpy()
+            conf = float(conf.item() if conf.ndim == 0 else conf.squeeze())
+            class_id = int(box.cls.cpu().numpy().squeeze())
+            class_name = classes.get(class_id, f"class_{class_id}")
+
+            # Get keypoints
+            keypoints = None
+            if i < len(result.keypoints):
+                kpts_data = result.keypoints[i].data.cpu().numpy()
+                keypoints = kpts_data.tolist()
+
+            detections.append(
+                DetectionResult(
+                    bbox=[x1, y1, x2, y2],
+                    confidence=conf,
+                    class_id=class_id,
+                    class_name=class_name,
+                    keypoints=keypoints,
+                )
+            )
+
+    # Detection task
+    elif result.boxes is not None:
+        for i in range(len(result.boxes)):
+            box = result.boxes[i]
+            x1, y1, x2, y2 = box.xyxy.squeeze().cpu().numpy().tolist()
+            conf = box.conf.cpu().numpy()
+            conf = float(conf.item() if conf.ndim == 0 else conf.squeeze())
+            class_id = int(box.cls.cpu().numpy().squeeze())
+            class_name = classes.get(class_id, f"class_{class_id}")
+
+            detections.append(
+                DetectionResult(
+                    bbox=[x1, y1, x2, y2],
+                    confidence=conf,
+                    class_id=class_id,
+                    class_name=class_name,
+                )
+            )
+
+    return ImageResult(
+        image_path="array",
+        image_shape=image_shape,
+        detections=detections,
+        task_type=task_type,
+        probs=probs,
+        obb_boxes=obb_boxes,
+    )
 
 
 class YOLOInference:
@@ -502,6 +636,8 @@ class YOLOInference:
 
     def inference_pytorch(self, image: np.ndarray) -> ImageResult:
         """Run inference with PyTorch model."""
+        start_time = time.perf_counter()
+
         results = self.model.predict(
             image,
             imgsz=self.imgsz,
@@ -513,110 +649,16 @@ class YOLOInference:
             verbose=False,
         )
 
+        inference_time = time.perf_counter() - start_time
         image_shape = image.shape[:2]
-        task_type = self._detect_task_type()
-
-        detections = []
-        probs = None
-        obb_boxes = None
 
         if results and len(results) > 0:
-            result = results[0]
+            result = _parse_pytorch_result(results[0], self.classes, image_shape)
+        else:
+            result = ImageResult(image_path="array", image_shape=image_shape)
 
-            # Handle classification task
-            if result.probs is not None:
-                task_type = "classify"
-                probs = []
-                for idx in result.probs.top5:
-                    class_name = self.classes.get(idx, f"class_{idx}")
-                    prob = float(result.probs.data[idx])
-                    probs.append((class_name, prob))
-
-            # Handle OBB task
-            elif result.obb is not None:
-                task_type = "obb"
-                obb_boxes = []
-                for i in range(len(result.obb)):
-                    box = result.obb[i]
-                    xyxyxyxy = box.xyxyxyxy.cpu().numpy()
-                    if xyxyxyxy.ndim > 2:
-                        xyxyxyxy = xyxyxyxy.squeeze()
-                    if xyxyxyxy.ndim == 1:
-                        xyxyxyxy = xyxyxyxy.reshape(4, 2)
-                    conf = float(box.conf.cpu().numpy())
-                    class_id = int(box.cls.cpu().numpy())
-                    class_name = self.classes.get(class_id, f"class_{class_id}")
-
-                    # Also add as detection for compatibility
-                    detections.append(
-                        DetectionResult(
-                            bbox=box.xyxy.squeeze().cpu().numpy().tolist(),
-                            confidence=conf,
-                            class_id=class_id,
-                            class_name=class_name,
-                        )
-                    )
-                    obb_boxes.append({
-                        "points": xyxyxyxy.tolist(),
-                        "confidence": conf,
-                        "class_id": class_id,
-                        "class_name": class_name,
-                    })
-
-            # Handle detect/segment/pose tasks
-            elif result.boxes is not None:
-                boxes = result.boxes
-
-                for i in range(len(boxes)):
-                    box = boxes.xyxy[i].cpu().numpy()
-                    conf = float(boxes.conf[i].cpu().numpy())
-                    class_id = int(boxes.cls[i].cpu().numpy())
-                    class_name = self.classes.get(class_id, f"class_{class_id}")
-
-                    # Get mask if available
-                    mask = None
-                    if result.masks is not None:
-                        task_type = "segment"
-                        # Get binary mask in original image coordinates
-                        mask_data = result.masks.data[i].cpu().numpy()
-                        # Scale mask to original image size
-                        mask = cv2.resize(
-                            mask_data.astype(np.uint8),
-                            (image_shape[1], image_shape[0]),
-                            interpolation=cv2.INTER_NEAREST
-                        )
-
-                    # Get keypoints if available
-                    keypoints = None
-                    if result.keypoints is not None:
-                        task_type = "pose"
-                        kpt_data = result.keypoints.data[i].cpu().numpy()
-                        if kpt_data.shape[-1] == 3:
-                            # (x, y, conf) format
-                            keypoints = kpt_data.tolist()
-                        else:
-                            # (x, y) format
-                            keypoints = kpt_data.tolist()
-
-                    detections.append(
-                        DetectionResult(
-                            bbox=box.tolist(),
-                            confidence=conf,
-                            class_id=class_id,
-                            class_name=class_name,
-                            mask=mask,
-                            keypoints=keypoints,
-                        )
-                    )
-
-        return ImageResult(
-            image_path="array",
-            image_shape=image_shape,
-            detections=detections,
-            task_type=task_type,
-            probs=probs,
-            obb_boxes=obb_boxes,
-        )
+        result.inference_time = inference_time
+        return result
 
     def inference_onnx(self, image: np.ndarray) -> ImageResult:
         """Run inference with ONNX model."""
@@ -681,136 +723,11 @@ class YOLOInference:
         per_image_time = inference_time / len(images)
 
         all_results = []
-        task_type = self._detect_task_type()
-
         for idx, result in enumerate(results):
             image_shape = images[idx].shape[:2]
-            detections = []
-            probs = None
-            obb_boxes = None
-
-            # Handle classification task
-            if result.probs is not None:
-                task_type = "classify"
-                probs = []
-                for class_idx in result.probs.top5:
-                    class_name = self.classes.get(class_idx, f"class_{class_idx}")
-                    prob = float(result.probs.data[class_idx])
-                    probs.append((class_name, prob))
-
-            # Handle OBB task
-            elif result.obb is not None:
-                task_type = "obb"
-                obb_boxes = []
-                for i in range(len(result.obb)):
-                    box = result.obb[i]
-                    xyxyxyxy = box.xyxyxyxy.squeeze().cpu().numpy()
-                    conf = float(box.conf.cpu().numpy())
-                    class_id = int(box.cls.cpu().numpy())
-                    class_name = self.classes.get(class_id, f"class_{class_id}")
-
-                    detections.append(
-                        DetectionResult(
-                            bbox=box.xyxy.squeeze().cpu().numpy().tolist(),
-                            confidence=conf,
-                            class_id=class_id,
-                            class_name=class_name,
-                        )
-                    )
-                    obb_boxes.append({
-                        "points": xyxyxyxy.reshape(-1, 2).tolist(),
-                        "confidence": conf,
-                        "class_id": class_id,
-                        "class_name": class_name,
-                    })
-
-            # Handle segmentation task
-            elif result.masks is not None:
-                task_type = "segment"
-                for i in range(len(result.boxes)):
-                    box = result.boxes[i]
-                    x1, y1, x2, y2 = box.xyxy.squeeze().cpu().numpy().tolist()
-                    conf = box.conf.cpu().numpy()
-                    conf = float(conf.item() if conf.ndim == 0 else conf.squeeze())
-                    class_id = int(box.cls.cpu().numpy().squeeze())
-                    class_name = self.classes.get(class_id, f"class_{class_id}")
-
-                    # Get mask
-                    mask = None
-                    if result.masks is not None and i < len(result.masks):
-                        mask_tensor = result.masks[i].data
-                        mask = mask_tensor.cpu().numpy().squeeze()
-                        # Resize mask to original image size
-                        mask_h, mask_w = mask.shape
-                        orig_h, orig_w = image_shape
-                        if mask_h != orig_h or mask_w != orig_w:
-                            mask = cv2.resize(mask.astype(np.uint8), (orig_w, orig_h), interpolation=cv2.INTER_NEAREST)
-
-                    detections.append(
-                        DetectionResult(
-                            bbox=[x1, y1, x2, y2],
-                            confidence=conf,
-                            class_id=class_id,
-                            class_name=class_name,
-                            mask=mask,
-                        )
-                    )
-
-            # Handle pose task
-            elif result.keypoints is not None:
-                task_type = "pose"
-                for i in range(len(result.boxes)):
-                    box = result.boxes[i]
-                    x1, y1, x2, y2 = box.xyxy.squeeze().cpu().numpy().tolist()
-                    conf = box.conf.cpu().numpy()
-                    conf = float(conf.item() if conf.ndim == 0 else conf.squeeze())
-                    class_id = int(box.cls.cpu().numpy().squeeze())
-                    class_name = self.classes.get(class_id, f"class_{class_id}")
-
-                    # Get keypoints
-                    keypoints = None
-                    if result.keypoints is not None and i < len(result.keypoints):
-                        kpts_data = result.keypoints[i].data.cpu().numpy()
-                        keypoints = kpts_data.tolist()
-
-                    detections.append(
-                        DetectionResult(
-                            bbox=[x1, y1, x2, y2],
-                            confidence=conf,
-                            class_id=class_id,
-                            class_name=class_name,
-                            keypoints=keypoints,
-                        )
-                    )
-
-            # Handle detection task
-            elif result.boxes is not None:
-                for i in range(len(result.boxes)):
-                    box = result.boxes[i]
-                    x1, y1, x2, y2 = box.xyxy.squeeze().cpu().numpy().tolist()
-                    conf = box.conf.cpu().numpy()
-                    conf = float(conf.item() if conf.ndim == 0 else conf.squeeze())
-                    class_id = int(box.cls.cpu().numpy().squeeze())
-                    class_name = self.classes.get(class_id, f"class_{class_id}")
-
-                    detections.append(
-                        DetectionResult(
-                            bbox=[x1, y1, x2, y2],
-                            confidence=conf,
-                            class_id=class_id,
-                            class_name=class_name,
-                        )
-                    )
-
-            all_results.append(ImageResult(
-                image_path="array",
-                image_shape=image_shape,
-                detections=detections,
-                inference_time=per_image_time,
-                task_type=task_type,
-                probs=probs,
-                obb_boxes=obb_boxes,
-            ))
+            image_result = _parse_pytorch_result(result, self.classes, image_shape)
+            image_result.inference_time = per_image_time
+            all_results.append(image_result)
 
         return all_results
 
@@ -1265,7 +1182,7 @@ Examples:
     parser.add_argument("--max-det", type=int, default=300, help="Maximum detections per image")
     parser.add_argument("--agnostic-nms", action="store_true", help="Class-agnostic NMS")
     parser.add_argument("--multi-label", action="store_true", default=True, help="Multi-label detection")
-    parser.add_argument("--classes", type=int, nargs="+", help="只保留指定类别ID，如 --classes 0 1 2 (person=0, car=2)")
+    parser.add_argument("--classes", type=int, nargs="+", help="Filter by class IDs (e.g. --classes 0 1 2)")
 
     # Visualization settings
     parser.add_argument("--box-thickness", type=int, default=2, help="Bounding box line thickness")

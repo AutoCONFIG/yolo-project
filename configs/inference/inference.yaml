@@ -19,6 +19,12 @@ io:
   save_txt: true           # Save YOLO format txt labels
   save_crop: false         # Save cropped detection images
 
+# Tracking settings (only used for video inference)
+tracking:
+  enabled: false              # Enable object tracking (true for video sources)
+  tracker: botsort.yaml       # Tracker config: botsort.yaml or bytetrack.yaml
+  persist: false              # Persist trackers between frames
+
 # NMS (Non-Maximum Suppression) settings
 nms:
   conf: 0.35        # Confidence threshold

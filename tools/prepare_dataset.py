@@ -63,7 +63,7 @@ import shutil
 from pathlib import Path
 
 # ========== 可修改的默认参数 ==========
-DEFAULT_SOURCE = "/media/yun/de2a43ce-446c-4a62-99b3-8ddc6ea1ef87/datasets/source/chaoyuan"
+DEFAULT_SOURCE = "/media/yun/706bc403-c76c-4fdd-8a3f-d954b6189048/datasets/source/chaoyuan"
 DEFAULT_OUTPUT = "/media/yun/de2a43ce-446c-4a62-99b3-8ddc6ea1ef87/datasets/chaoyuan"
 DEFAULT_VAL_RATIO = 0.2
 DEFAULT_SEED = 42
@@ -339,7 +339,7 @@ def fix_label_line(line: str, task_type: str = "pose", kpt_shape: tuple[int, int
     return " ".join(out), warnings
 
 
-def copy_or_link(src: Path, dst: Path, mode: str = "hard") -> None:
+def copy_or_link(src: Path, dst: Path, mode: str = "soft") -> None:
     """
     根据 mode 选择复制或链接方式：
       hard = 硬链接（同文件系统，不占用额外空间，最快）
@@ -422,8 +422,8 @@ def main():
                         help="手动指定关键点配置 (如: 4 3)，仅pose模式有效，auto模式覆盖自动检测")
     parser.add_argument("--classes", type=str, nargs="+", default=None,
                         help="类别名称列表 (如: --classes person car dog)，默认使用 class_0 class_1 ...")
-    parser.add_argument("--link-mode", type=str, choices=["hard", "soft", "copy"], default="hard",
-                        help="文件复制方式: hard=硬链接(最快,同文件系统), soft=软链接, copy=完整复制(默认: hard)")
+    parser.add_argument("--link-mode", type=str, choices=["hard", "soft", "copy"], default="soft",
+                        help="文件复制方式: hard=硬链接(最快,同文件系统), soft=软链接(默认,支持跨文件系统), copy=完整复制")
 
     args = parser.parse_args()
 

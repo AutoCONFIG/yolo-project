@@ -40,11 +40,6 @@ ULTRALYTICS_PATH = Path(__file__).parent / "ultralytics"
 if ULTRALYTICS_PATH.exists():
     sys.path.insert(0, str(ULTRALYTICS_PATH))
 
-# Patch ultralytics downloads to use weights_dir (must be before ultralytics imports)
-from utils.downloads import patch_ultralytics_downloads  # noqa: E402
-
-patch_ultralytics_downloads()
-
 from ultralytics import YOLO  # noqa: E402
 
 from utils.config import get_nested_value, load_yaml_config, merge_configs, set_boolean_argument, to_bool
@@ -522,8 +517,6 @@ def print_formats():
 
 
 def main():
-    import traceback
-
     args = parse_args()
 
     try:

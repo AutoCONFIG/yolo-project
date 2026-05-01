@@ -1,7 +1,7 @@
 # Chaoyuan Dataset Configuration
 # ==============================
 # path: relative to project root or absolute path
-path: /media/yun/de2a43ce-446c-4a62-99b3-8ddc6ea1ef87/datasets/chaoyuan
+path: /media/yun/de2a43ce-446c-4a62-99b3-8ddc6ea1ef87/datasets/chaoyuan/
 
 train: images/train
 val: images/val

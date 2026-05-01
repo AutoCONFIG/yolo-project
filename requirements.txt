@@ -1,6 +1,0 @@
-argparse
-numpy
-opencv-python
-pyyaml
-ultralytics
-onnxruntime

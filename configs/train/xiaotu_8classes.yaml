@@ -33,7 +33,7 @@ train:
   freeze:  # freeze first N layers, e.g. 10
   multi_scale: 0.5
   compile: false
-  end2end:  # important for YOLO26
+  end2end: true  # YOLO26 end-to-end NMS-free detection
   nbs: 24
   profile: false
 
