@@ -1,0 +1,102 @@
+# YOLO Detection + Tracking Training Configuration - Example
+# ==========================================================
+# 目标检测训练配置示�?(训练后可用于 track 模式)
+# 跟踪功能不需要专门训�? 使用 detect 模型即可
+# 训练完成后通过 tracker 配置进行视频跟踪推理
+
+
+model:
+  name: yolo26n.pt                                           # .pt 加载预训练权�?(跟踪基于检测模�?
+  pretrained: true                                           # True=加载预训练权�?  task: detect                                               # 跟踪基于 detect 任务模型
+
+data:
+  config: configs/datasets/example/detect_example.yaml       # 数据集配置文件路径
+  split: val                                                 # 验证集划分名称
+train:
+  epochs: 100                                                  # 总训练轮�?(早停会提前结�?
+  time:                                                        # 最大训练时�?小时), 设置后覆�?epochs
+  batch: 16                                                    # 每批次图像数 (16G 显存建议 32-64)
+  imgsz: 640                                                   # 输入图像尺寸 (640=标准, 800/960=小目标但�?
+  device: null                                                 # null=自动, "0"=第一块GPU, "0,1"=多卡
+  workers: 8                                                   # 数据加载进程 (�?HDD 建议 1-2, SSD 建议 4-8)
+  resume: false                                                # true=�?last.pt 恢复训练
+  patience: 100                                                # 早停耐心�?(连续 N �?mAP 不提升则停止)
+  cache: false                                                 # True/'ram'=内存缓存(需大内�?, 'disk'=磁盘缓存, False=不缓�?  save: true                                                   # 是否保存训练权重
+  amp: true                                                    # 自动混合精度训练 (FP16, 加�?省显�?
+  rect: false                                                  # 矩形推理训练 (加速但可能影响精度, 通常关闭)
+  single_cls: false                                            # 单类别模�?(所有目标视为同一�? 多类检测关�?
+  fraction: 1.0                                                # 使用数据集比�?(1.0=全部, 0.5=一�? 用于快速实�?
+  freeze:                                                      # 冻结�?N �?(�?10=冻结 backbone, 微调预训练模型时�?
+  multi_scale: 0.0                                             # 多尺度训�?(0.3=图像�?0.7x~1.3x 间随机缩�?
+  compile: false                                               # PyTorch 编译优化 (true=加速计�? IO 瓶颈时不建议开�?
+  end2end:                                                     # YOLO26 端到端检�?(true=�?NMS)
+  nbs: 64                                                      # 名义批次大小 (用于学习率缩�? 建议等于 batch)
+  profile: false                                               # 性能分析 (true=分析 ONNX/TensorRT 导出速度)
+  augmentations:                                               # 自定�?Albumentations 增强 (null=使用默认)
+
+  optimizer: auto                                              # AdamW=推荐, SGD=精度可能更高但调参难
+  lr0: 0.01                                                    # 初始学习�?(官方: SGD=0.01, Adam/AdamW=0.001)
+  lrf: 0.01                                                    # 最终学习率比例 (最�?lr = lr0 * lrf)
+  momentum: 0.937                                              # SGD 动量 / Adam beta1 (YOLO 默认�?
+  weight_decay: 0.0005                                         # 权重衰减 (大数据集�?0.0005, 小数据集可用 0.001)
+  cos_lr: false                                                # 余弦学习率退�?(true=平滑下降, false=阶梯下降)
+
+  warmup_epochs: 3.0                                           # 预热轮数 (训练初期 lr 从小逐渐升到 lr0)
+  warmup_momentum: 0.8                                         # 预热动量 (从该值逐渐升到 momentum)
+  warmup_bias_lr: 0.1                                          # 预热偏置学习�?(偏置参数使用更高 lr 加速收�?
+
+  box: 7.5                                                     # 边界框回归损失权�?(小目标检测建议提�?8.5-10)
+  cls: 0.5                                                     # 分类损失权重 (通常 0.5)
+  cls_pw: 0.0                                                  # 类别权重幂次 (0=禁用, 1.0=按逆频率加�? 解决类别不平�?
+  dfl: 1.5                                                     # 分布焦点损失权重 (YOLO 默认�?
+
+  close_mosaic: 10                                             # 最�?N 轮关�?Mosaic 增强 (建议 >= patience)
+  seed: 0                                                      # 随机种子 (0=随机, 固定�?结果可复�?
+  deterministic: true                                          # 确定性模�?(true=结果可复现但稍慢, false=更快但不可复�?
+
+  dropout: 0.0                                                 # 分类任务专用 (检测任务忽�?
+  overlap_mask: true                                           # 分割任务专用 (检测任务忽�?
+  mask_ratio: 4                                                # 分割任务专用 (检测任务忽�?
+
+augmentation:
+  hsv_h: 0.015                                                 # HSV 色调增强 (0.015=±1.5% 色调变化)
+  hsv_s: 0.7                                                   # HSV 饱和度增�?(0.7=±70% 饱和度变�?
+  hsv_v: 0.4                                                   # HSV 亮度增强 (0.4=±40% 亮度变化)
+  degrees: 0.0                                                 # 旋转角度 (5.0=±5�? 监控场景建议 0-10)
+  translate: 0.1                                               # 平移比例 (0.15=±15% 平移)
+  scale: 0.5                                                   # 缩放范围 (0.5=0.5x~1.5x, 图像较大时建�?0.5-0.6)
+  shear: 0.0                                                   # 剪切角度 (3.0=±3度剪切变�?
+  perspective: 0.0                                             # 透视变换 (0.0=禁用, 0.001=轻微透视)
+  flipud: 0.0                                                  # 垂直翻转概率 (0.0=禁用, 航拍/卫星图可开�?
+  fliplr: 0.5                                                  # 水平翻转概率 (0.5=50%, 左右对称场景适用)
+  bgr: 0.0                                                     # BGR 通道交换概率 (0.0=禁用)
+  mosaic: 1.0                                                  # Mosaic 拼接增强概率 (1.0=100%, 多目标场景强烈推�?
+  mixup: 0.0                                                   # MixUp 混合增强概率 (0.0-0.1)
+  cutmix: 0.0                                                  # CutMix 增强概率 (0.0=禁用)
+  copy_paste: 0.0                                              # 复制粘贴增强 (0.0=禁用)
+  copy_paste_mode: flip                                        # 复制粘贴模式 (flip=翻转粘贴, mixup=混合粘贴)
+  auto_augment: randaugment                                    # 自动增强策略 (randaugment/autoaugment/augmix)
+  erasing: 0.4                                                 # 随机擦除概率 (分类任务常用, 检测通常忽略)
+
+validation:
+  val: true                                                    # 是否进行验证
+  conf:                                                        # 置信度阈�?(0.25=只保留置信度>25%的检测框)
+  iou: 0.7                                                     # NMS IoU 阈�?(0.7=IoU>0.7的重叠框会被合并)
+  max_det: 300                                                 # 每张图最大检测数 (300=最多输�?300 个框)
+  half: false                                                  # FP16 半精度验�?(true=快但精度略低, false=FP32精度更高)
+  plots: true                                                  # 是否生成验证可视化图
+  save_json: false                                             # 是否保存 COCO 格式 JSON 结果
+  dnn: false                                                   # 使用 OpenCV DNN 进行 ONNX 推理验证
+  agnostic_nms: false                                          # 类别无关 NMS (true=不同类别的框也做 NMS, 通常关闭)
+  augment: false                                               # 测试时增�?TTA (true=验证时做多尺度增�? 慢但精度略高)
+
+# 跟踪器配�?(仅在 track 模式推理时使�? 训练阶段不生�?
+# 训练完成后使�? python yolo.py track --model runs/detect/train/weights/best.pt --source video.mp4 tracker=botsort.yaml
+tracker: botsort.yaml                                          # 跟踪器配�? botsort.yaml (推荐, ReID+运动) / bytetrack.yaml (轻量, 仅运�?
+
+output:
+  project:                                                     # 训练结果保存目录 (相对于项目根目录)
+  name: track_example                                          # 本次训练实验名称
+  save_period: -1                                              # �?N 轮保存一次权�?(-1=只保�?best/last)
+  exist_ok: false                                              # true=覆盖已有目录 (从头训练时需�?
+  verbose: true                                                # 是否输出详细日志

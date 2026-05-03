@@ -1,0 +1,29 @@
+# OpenVINO Detection Export Configuration - Example
+# ================================================================
+# 目标检测模型 OpenVINO 导出配置示例
+# OpenVINO 在 Intel CPU 上推理速度通常优于 ONNX Runtime
+
+model:
+  path: runs/detect/train/weights/best.pt              # 检测模型路径
+  format: openvino                                     # 导出格式: openvino
+  imgsz: 640                                           # 输入尺寸 (与训练一致, 检测常用640)
+  batch: 1                                             # 批次大小
+  device: cpu                                          # Intel CPU推荐 (OpenVINO核心优势)
+
+export:
+  half: true                                           # FP16 (检测推荐开启, Intel GPU/新CPU支持)
+  dynamic: false                                       # 动态尺寸 (检测通常固定640)
+  simplify: true                                       # ONNX图简化 (推荐开启, 先简化ONNX再转OpenVINO)
+  opset: null                                          # opset版本 (null=自动选择)
+  nms: false                                           # 嵌入NMS (可开启简化后处理)
+  int8: false                                          # INT8量化 (可开启但需校准数据集)
+  fraction: 1.0                                        # 校准数据集比例 (1.0=全部, 0.5=只用一半)
+  keras: false                                         # Keras导出 (OpenVINO不使用)
+
+output:
+  path: null                                           # 输出路径 (null=自动生成)
+  verbose: true                                        # 详细输出 (true=显示转换日志)
+
+verify:
+  enabled: true                                        # 导出后验证 (推荐开启, CPU上直接验证)
+  source: null

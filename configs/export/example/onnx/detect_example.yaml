@@ -1,0 +1,29 @@
+# ONNX Detection Export Configuration - Example
+# ================================================================
+# 目标检测模型 ONNX 导出配置示例
+# ONNX 是开放标准格式, 几乎所有推理引擎都支持
+
+model:
+  path: runs/detect/train/weights/best.pt              # 检测模型路径
+  format: onnx                                         # 导出格式: onnx
+  imgsz: 640                                           # 输入尺寸 (与训练一致)
+  batch: 1                                             # 批次大小
+  device: auto                                         # 计算设备 (auto=自动, cpu, 0=GPU)
+
+export:
+  half: false                                          # FP16 (检测推荐关闭保证精度, GPU推理可开启)
+  dynamic: true                                        # 动态尺寸 (推荐开启, 支持不同分辨率输入)
+  simplify: true                                       # ONNX图简化 (推荐开启, 减少节点数)
+  opset: null                                          # opset版本 (null=自动, 可手动指定12/13/17)
+  nms: false                                           # 嵌入NMS (true=模型输出即NMS后结果, 简化后处理)
+  int8: false                                          # INT8量化 (false=不量化; true=需配合data校准数据集)
+  fraction: 1.0                                        # INT8校准数据集比例 (1.0=全部, 0.5=只用一半加速校准)
+  keras: false                                         # Keras导出 (ONNX不使用, 仅TF SavedModel格式适用)
+
+output:
+  path: null                                           # 输出路径 (null=自动, 如 "export/model.onnx")
+  verbose: true                                        # 详细输出 (true=显示导出日志和图信息)
+
+verify:
+  enabled: true                                        # 导出后验证 (推荐开启, 用测试图推理验证模型可用)
+  source: null                                         # 验证图像路径 (null=随机生成测试图像)

@@ -158,10 +158,10 @@ names:
 
 ```bash
 # 使用配置文件训练
-python train.py --config configs/default.yaml --data your_dataset.yaml
+python yolo.py train --config configs/default.yaml --data your_dataset.yaml
 
 # 或者命令行直接指定
-python train.py --mode train --model yolo26n.pt --data your_dataset.yaml --epochs 100
+python yolo.py train --model yolo26n.pt --data your_dataset.yaml --epochs 100
 ```
 
 ## 常见问题
@@ -235,10 +235,18 @@ def split_dataset(source_images, source_labels, output_dir, train_ratio=0.8, val
 
 ```
 yolo-project/
-├── train.py                    # 训练脚本
-├── inference.py                # 推理脚本
-├── run_train.sh               # 训练启动脚本
-├── run_inference.sh           # 推理启动脚本
+├── yolo.py                      # 统一 CLI 入口
+├── commands/
+│   ├── train.py                 # 训练模块
+│   ├── val.py                   # 验证模块
+│   ├── predict.py               # 推理模块
+│   └── export.py                # 导出模块
+├── utils/
+│   └── config.py                # 共享配置工具
+├── run_train.sh                 # 训练启动脚本
+├── run_val.sh                   # 验证启动脚本
+├── run_predict.sh               # 推理启动脚本
+├── run_export.sh                # 导出启动脚本
 ├── configs/
 │   ├── default.yaml           # 默认训练配置
 │   ├── val.yaml               # 验证配置

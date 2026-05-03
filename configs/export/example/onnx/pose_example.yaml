@@ -1,0 +1,29 @@
+# ONNX Pose Export Configuration - Example
+# ================================================================
+# 姿态估计模型 ONNX 导出配置示例
+# 注意: 姿态模型输出包含关键点, 部分推理引擎需要特殊后处理
+
+model:
+  path: runs/pose/train/weights/best.pt                # 姿态模型路径 (注意 pose 目录)
+  format: onnx                                         # 导出格式: onnx
+  imgsz: 640                                           # 输入尺寸 (与训练一致)
+  batch: 1                                             # 批次大小
+  device: auto                                         # 计算设备
+
+export:
+  half: true                                           # FP16 (姿态推荐开启, 关键点对精度不敏感)
+  dynamic: true                                        # 动态尺寸 (推荐开启, 支持不同分辨率)
+  simplify: true                                       # ONNX图简化 (推荐开启)
+  opset: null                                          # opset版本 (null=自动)
+  nms: false                                           # 嵌入NMS (按需开启)
+  int8: false                                          # INT8量化 (姿态关键点精度敏感, 谨慎使用)
+  fraction: 1.0                                        # 校准数据集比例
+  keras: false                                         # Keras导出 (ONNX不使用)
+
+output:
+  path: null
+  verbose: true
+
+verify:
+  enabled: true
+  source: null

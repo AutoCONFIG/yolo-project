@@ -1,0 +1,25 @@
+# Segmentation Dataset Configuration
+# ===================================
+# 实例分割数据集配置示例
+# 适用任务: segment (实例分割)
+# 数据集格式: YOLO格式 (images/ + labels/)
+
+# 数据集根路径
+path: ../datasets/segment_example               # 数据集根目录路径 (相对路径或绝对路径)
+
+# 图像路径 (相对于 path)
+train: images/train                             # 训练集图像目录 (相对于path)
+val: images/val                                 # 验证集图像目录 (相对于path)
+test: images/test                               # 测试集图像目录 (可选, 相对于path)
+
+# 类别名称映射 (class_id: class_name)
+# 重要: class_id 必须从 0 开始连续编号, 且与标签文件一致
+names:
+  0: person                                     # 0=人物
+  1: car                                        # 1=汽车
+  2: dog                                        # 2=狗
+  3: cat                                        # 3=猫
+  4: bicycle                                    # 4=自行车
+
+# 可选: 自动下载数据集的URL或脚本
+# download: https://example.com/segment_dataset.zip  # 下载数据集 (支持URL或脚本)

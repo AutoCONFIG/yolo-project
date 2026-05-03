@@ -60,21 +60,40 @@ import argparse
 import os
 import random
 import shutil
+import sys
 from pathlib import Path
 
+# 确保项目根目录在 sys.path 中, 以便导入 utils
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from utils.config import IMG_EXTENSIONS
+
 # ========== 可修改的默认参数 ==========
-DEFAULT_SOURCE = "/media/yun/706bc403-c76c-4fdd-8a3f-d954b6189048/datasets/source/chaoyuan"
-DEFAULT_OUTPUT = "/media/yun/de2a43ce-446c-4a62-99b3-8ddc6ea1ef87/datasets/chaoyuan"
+DEFAULT_SOURCE = ""
+DEFAULT_OUTPUT = ""
 DEFAULT_VAL_RATIO = 0.2
 DEFAULT_SEED = 42
 DEFAULT_EMPTY_RATIO = 0  # 负样本比例 (0=不提取, 0.1=10%)
 # ======================================
 
-# 支持的图片格式
-IMG_EXTENSIONS = {'.jpg', '.jpeg', '.png'}
-
 # YOLO pose 标签格式 (num_keypoints, ndim)
 KPT_SHAPE = (4, 3)  # 4个关键点，每个点有 (x, y, visibility) 3个值
+
+
+def _ensure_positive_extent(
+    min_val: float, max_val: float, eps: float = 1e-4, bounds: tuple = (0.0, 1.0)
+) -> tuple[float, float]:
+    """确保 max_val > min_val，同时保持在 bounds 范围内。
+
+    当 bbox 宽高为0或负时，向 bounds 上限方向扩展 eps。
+    若 min_val 已接近上限，则同时向 bounds 下限方向收缩。
+    """
+    if max_val <= min_val:
+        lo, hi = bounds
+        if min_val >= hi - eps:
+            min_val = max(lo, min_val - eps)
+        max_val = min(hi, min_val + eps)
+    return min_val, max_val
 
 
 def detect_task_type(pairs: list[tuple[Path, Path]]) -> tuple[str, tuple[int, int] | None]:
@@ -212,15 +231,8 @@ def fix_label_line(line: str, task_type: str = "pose", kpt_shape: tuple[int, int
         x2 = max(0.0, min(1.0, cx + w / 2.0))
         y2 = max(0.0, min(1.0, cy + h / 2.0))
 
-        eps = 1e-4
-        if x2 <= x1:
-            x2 = min(1.0, x1 + eps)
-            if x2 <= x1:
-                x1 = x2 - eps
-        if y2 <= y1:
-            y2 = min(1.0, y1 + eps)
-            if y2 <= y1:
-                y1 = y2 - eps
+        x1, x2 = _ensure_positive_extent(x1, x2)
+        y1, y2 = _ensure_positive_extent(y1, y2)
 
         cx = (x1 + x2) / 2.0
         cy = (y1 + y2) / 2.0
@@ -308,17 +320,13 @@ def fix_label_line(line: str, task_type: str = "pose", kpt_shape: tuple[int, int
     y_min = max(0.0, y_min)
     y_max = min(1.0, y_max)
 
-    eps = 1e-4
-    if x_max <= x_min:
-        x_max = min(1.0, x_min + eps)
-        if x_max <= x_min:
-            x_min = max(0.0, x_max - eps)
+    x_min_orig, x_max_orig = x_min, x_max
+    y_min_orig, y_max_orig = y_min, y_max
+    x_min, x_max = _ensure_positive_extent(x_min, x_max)
+    y_min, y_max = _ensure_positive_extent(y_min, y_max)
+    if (x_min, x_max) != (x_min_orig, x_max_orig):
         warnings.append("框宽度为0，已调整为极小值")
-
-    if y_max <= y_min:
-        y_max = min(1.0, y_min + eps)
-        if y_max <= y_min:
-            y_min = max(0.0, y_max - eps)
+    if (y_min, y_max) != (y_min_orig, y_max_orig):
         warnings.append("框高度为0，已调整为极小值")
 
     # 重新计算 cx, cy, w, h
@@ -426,6 +434,11 @@ def main():
                         help="文件复制方式: hard=硬链接(最快,同文件系统), soft=软链接(默认,支持跨文件系统), copy=完整复制")
 
     args = parser.parse_args()
+
+    if not args.source:
+        parser.error("--source 是必需的，请指定原始数据目录")
+    if not args.output:
+        parser.error("--output 是必需的，请指定输出目录")
 
     source = Path(args.source).resolve()
     output = Path(args.output).resolve()

@@ -14,7 +14,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-DEFAULT_CONFIG="${SCRIPT_DIR}/configs/train/train_example.yaml"
+DEFAULT_CONFIG="${SCRIPT_DIR}/configs/train/example/detect_example.yaml"
 
 CONFIG_FILE="${SCRIPT_DIR}/configs/train/chaoyuan.yaml"
 EXTRA_ARGS=()
@@ -50,7 +50,7 @@ echo "Extra args: ${EXTRA_ARGS[*]}"
 echo "=============================================="
 
 if [ -z "$CONFIG_FILE" ]; then
-    python "${SCRIPT_DIR}/train.py" "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"
+    python "${SCRIPT_DIR}/yolo.py" train "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"
 else
-    python "${SCRIPT_DIR}/train.py" --config "$CONFIG_FILE" "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"
+    python "${SCRIPT_DIR}/yolo.py" train --config "$CONFIG_FILE" "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"
 fi

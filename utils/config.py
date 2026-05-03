@@ -1,8 +1,8 @@
 """
 Shared configuration utilities for YOLO project.
 
-This module provides common functions used across train.py, export.py, and inference.py
-to avoid code duplication and ensure consistency.
+This module provides common functions used across all command modules
+(train, val, predict, export) and tools to avoid code duplication and ensure consistency.
 
 Functions:
     load_yaml_config: Load configuration from YAML file.
@@ -10,16 +10,39 @@ Functions:
     get_nested_value: Safely get nested value from config dict.
     to_bool: Convert 'true'/'false' string to bool.
     set_boolean_argument: Add paired --flag/--no-flag CLI arguments.
-    setup_logging: Configure logging with optional level and file output.
+    setup_ultralytics_path: Add local ultralytics submodule to sys.path.
+    draw_dashed_line: Draw a dashed line between two points (shared cv2 utility).
+
+Constants:
+    PROJECT_ROOT: Absolute path to the project root directory.
+    IMG_EXTENSIONS: Common image file extensions.
+    VIDEO_EXTENSIONS: Common video file extensions.
 """
 
 import argparse
-import logging
 import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+import cv2
+import numpy as np
 import yaml
+
+# ─── Project root & path setup ──────────────────────────────────────────
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
+def setup_ultralytics_path() -> None:
+    """Add the local ultralytics submodule to sys.path if it exists.
+
+    Call this at module level in every command script so that
+    ``from ultralytics import YOLO`` resolves to the submodule
+    rather than a system-wide install.
+    """
+    ult_path = PROJECT_ROOT / "ultralytics"
+    if ult_path.exists() and str(ult_path) not in sys.path:
+        sys.path.insert(0, str(ult_path))
 
 
 def load_yaml_config(config_path: str) -> Dict[str, Any]:
@@ -84,21 +107,24 @@ def get_nested_value(config: Dict, *keys, default=None):
     return current
 
 
-def to_bool(value: str | None) -> bool | None:
-    """Convert 'true'/'false' string to bool.
+def to_bool(value: str | bool | None) -> bool | None:
+    """Convert 'true'/'false' string or native bool to bool.
 
     Args:
-        value: String value to convert. Case-insensitive.
+        value: String or bool value to convert. Case-insensitive for strings.
 
     Returns:
-        True for 'true', False for 'false', None for None or unknown values.
+        True for 'true'/True, False for 'false'/False, None for None or unknown values.
     """
     if value is None:
         return None
-    if value.lower() == "true":
-        return True
-    if value.lower() == "false":
-        return False
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        if value.lower() == "true":
+            return True
+        if value.lower() == "false":
+            return False
     return None
 
 
@@ -153,28 +179,74 @@ def set_boolean_argument(
     )
 
 
-def setup_logging(
-    level: str = "INFO",
-    log_file: str | None = None,
-    format_str: str = None,
-) -> None:
-    """Configure Python logging.
+def config_from_args(
+    args: argparse.Namespace,
+    plain: tuple = (),
+    boolean: tuple = (),
+    rename: Dict[str, str] | None = None,
+) -> Dict[str, Any]:
+    """从 argparse 命名空间提取配置字典。
+
+    消除 ``for field in (...): v = getattr(args, field)`` 的重复样板代码。
 
     Args:
-        level: Logging level ('DEBUG', 'INFO', 'WARNING', 'ERROR').
-        log_file: Optional path to log file.
-        format_str: Custom log format string.
+        args: 解析后的命令行参数
+        plain: 原样传递的字段名 (直接 getattr, 排除 None)
+        boolean: 通过 ``to_bool`` 转换的字段名 (排除 None)
+        rename: {arg字段名: config键名} 重映射, 例如 {"model": "name", "data": "config"}
+
+    Returns:
+        非空字段组成的配置字典
+
+    Example::
+
+        model_cfg = config_from_args(
+            args,
+            plain=("model", "task", "classes"),
+            rename={"model": "name"},
+        )
+        # args.model="yolo.pt" → {"name": "yolo.pt"}
     """
-    if format_str is None:
-        format_str = "%(asctime)s [%(levelname)s] %(message)s"
+    cfg: Dict[str, Any] = {}
+    rename = rename or {}
 
-    handlers = [logging.StreamHandler(sys.stdout)]
-    if log_file:
-        handlers.append(logging.FileHandler(log_file, encoding="utf-8"))
+    for field in plain:
+        v = getattr(args, field, None)
+        if v is not None:
+            cfg[rename.get(field, field)] = v
 
-    logging.basicConfig(
-        level=getattr(logging, level.upper(), logging.INFO),
-        format=format_str,
-        handlers=handlers,
-        force=True,
-    )
+    for field in boolean:
+        v = to_bool(getattr(args, field, None))
+        if v is not None:
+            cfg[rename.get(field, field)] = v
+
+    return cfg
+
+
+# ─── Shared drawing utilities ───────────────────────────────────────────
+
+
+def draw_dashed_line(
+    img,
+    pt1: tuple,
+    pt2: tuple,
+    color: tuple,
+    thickness: int = 1,
+    dash_len: int = 10,
+    gap_len: int = 6,
+) -> None:
+    """在两点之间绘制虚线 (共享实现)。"""
+    x1, y1 = pt1
+    x2, y2 = pt2
+    dist = np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+    if dist < 1:
+        return
+    dashes = int(dist / (dash_len + gap_len)) + 1
+    for i in range(dashes):
+        s = i * (dash_len + gap_len) / dist
+        e = min((i * (dash_len + gap_len) + dash_len) / dist, 1.0)
+        sx = int(x1 + (x2 - x1) * s)
+        sy = int(y1 + (y2 - y1) * s)
+        ex = int(x1 + (x2 - x1) * e)
+        ey = int(y1 + (y2 - y1) * e)
+        cv2.line(img, (sx, sy), (ex, ey), color, thickness)

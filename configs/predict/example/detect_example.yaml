@@ -1,0 +1,55 @@
+# YOLO Detection Inference Configuration - Example
+# =================================================
+# 目标检测推理配置示例
+# 适用于: 通用目标检测、物体定位
+
+# Model settings
+model:
+  path: "runs/detect/train/weights/best.pt"     # 模型路径 (.pt 或 .onnx 格式)
+  format: auto                                  # 模型格式: auto=自动检测, pytorch=PyTorch, onnx=ONNX
+  imgsz: 640                                    # 输入图像尺寸 (640=标准, 800/960=小目标但慢)
+  device: auto                                  # 运行设备: auto=自动, cpu=CPU, cuda=GPU, 0=指定GPU
+  batch: 1                                      # 批次大小 (16G显存建议32-64, 视频逐帧处理)
+  classes: null                                 # 类别过滤 (null=所有类, [0,2]=只检测人/车等)
+  stream: false                                 # 流式推理模式 (视频/大文件省内存, 长视频必开)
+  half: false                                   # FP16半精度 (提速2x+, 几乎无损精度, 推荐开启)
+  augment: false                                # TTA测试时增强 (精度提升但更慢, 小数据集可用)
+  vid_stride: 1                                 # 视频帧间隔 (1=每帧处理, 5=每5帧处理1帧省时间)
+  int8: false                                   # INT8量化推理 (最快, 边缘设备适用, 精度稍降)
+  visualize: false                              # 可视化模型中间特征 (调试/教学用, 正常推理关闭)
+  embed: null                                   # 提取特征嵌入 (指定层索引如[0,1,2], 下游任务用)
+
+# Input/Output settings
+io:
+  input: "datasets/test/images"                 # 输入路径 (图片/目录/视频/URL)
+  output: "runs/inference/detect"               # 输出目录 (默认相对路径)
+  save_vis: true                                # 保存可视化结果 (绘制检测框的图片)
+  save_json: false                              # 保存JSON格式结果 (便于程序解析)
+  save_txt: true                                # 保存YOLO格式标签 (.txt文件)
+  save_crop: false                              # 保存裁剪的目标 (每个目标单独图片)
+  save_frames: false                            # 保存视频帧为单独图片 (视频处理时用)
+
+# NMS (Non-Maximum Suppression) settings
+nms:
+  conf: 0.25                                    # 置信度阈值 (0.25=只保留>25%的检测, 提高可增召回)
+  iou: 0.7                                      # NMS IoU阈值 (0.7=IoU>0.7合并为同一目标)
+  max_det: 300                                  # 最大检测数 (每图最多输出300个框)
+  agnostic: false                               # 类别无关NMS (true=同类/不同类都合并, 密集场景用)
+
+# Visualization settings
+visualization:
+  box_thickness: 2                              # 框线粗细 (像素值, 建议2-3)
+  font_scale: 0.5                               # 字体大小 (0.5=适中, 大图可调大)
+  show_labels: true                             # 显示类别标签 (true=显示类名)
+  show_conf: true                               # 显示置信度 (true=显示0.85等分数)
+  show_boxes: true                              # 显示边界框 (true=绘制框线)
+  line_width: null                              # 框线宽度 (null=自动计算, 覆盖box_thickness)
+
+# Video settings
+video:
+  fps: null                                     # 输出视频FPS (null=保持原FPS, 可强制指定)
+  codec: "mp4v"                                 # 视频编码器 (mp4v=兼容性好, xvid/h264=质量高)
+  stream_buffer: false                          # 流缓冲 (false=保留最新帧, true=缓冲全部帧)
+
+# Other settings
+verbose: true                                   # 详细输出 (true=显示处理进度信息)

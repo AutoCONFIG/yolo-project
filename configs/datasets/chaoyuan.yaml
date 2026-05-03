@@ -1,13 +1,21 @@
 # Chaoyuan Dataset Configuration
 # ==============================
-# path: relative to project root or absolute path
+# 超远场景车辆/行人/车窗检测数据集配置
+# 适用任务: 目标检测 (detect)
+# 数据集结构: YOLO格式 (images/ + labels/)
+
+# 数据集根路径 (可以是绝对路径或相对于项目根目录的相对路径)
+# 路径说明: 包含 images/ 和 labels/ 子目录的父目录
 path: /media/yun/de2a43ce-446c-4a62-99b3-8ddc6ea1ef87/datasets/chaoyuan/
 
-train: images/train
-val: images/val
-# test: images/test
+# 训练集图像路径 (相对于 path 的相对路径)
+train: images/train                                     # 训练集图像目录
+val: images/val                                         # 验证集图像目录
+# test: images/test                                     # 测试集图像目录 (可选, 用于最终评估)
 
+# 类别名称映射 (class_id: class_name)
+# 注意: class_id 必须从 0 开始连续编号
 names:
-  0: car
-  1: person
-  2: sidewindow
+  0: car                                                # 0=汽车 (包括轿车、SUV、卡车等)
+  1: person                                             # 1=行人
+  2: sidewindow                                        # 2=车窗 (侧面车窗, 用于车内人员检测)

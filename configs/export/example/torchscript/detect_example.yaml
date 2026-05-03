@@ -1,0 +1,30 @@
+# TorchScript Detection Export Configuration - Example
+# ================================================================
+# 目标检测模型 TorchScript 导出配置示例
+# 适用场景: LibTorch C++ 集成, 移动端部署
+
+model:
+  path: runs/detect/train/weights/best.pt              # 检测模型路径
+  format: torchscript                                  # 导出格式: torchscript
+  imgsz: 640                                           # 输入尺寸 (与训练一致)
+  batch: 1                                             # 批次大小
+  device: cpu                                          # CPU或GPU均可
+
+export:
+  half: false                                          # FP16 (CPU导出必须false; GPU导出时可true)
+  dynamic: false                                       # 动态尺寸 (TorchScript动态支持有限)
+  simplify: false                                      # ONNX图简化 (TorchScript不需要, 跳过)
+  opset: null                                          # opset版本 (不适用)
+  nms: false                                           # 嵌入NMS (TorchScript推荐开启, 端到端推理)
+  int8: false                                          # INT8量化 (TorchScript不支持INT8)
+  optimize: false                                      # 移动端优化 (LibTorch部署可开启)
+  fraction: 1.0                                        # 校准比例 (TorchScript不使用)
+  keras: false                                         # Keras导出 (TorchScript不使用)
+
+output:
+  path: null                                           # 输出路径 (null=自动生成)
+  verbose: true                                        # 详细输出
+
+verify:
+  enabled: true                                        # 导出后验证 (推荐开启)
+  source: null

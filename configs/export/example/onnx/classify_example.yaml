@@ -1,0 +1,29 @@
+# ONNX Classification Export Configuration - Example
+# ================================================================
+# 分类模型 ONNX 导出配置示例
+# 注意: 分类模型输入尺寸通常224, 比检测小很多
+
+model:
+  path: runs/classify/train/weights/best.pt            # 分类模型路径 (注意 classify 目录)
+  format: onnx                                         # 导出格式: onnx
+  imgsz: 224                                           # 分类输入尺寸 (通常224, 比检测640小很多)
+  batch: 1                                             # 批次大小 (分类可加大, 显存占用小)
+  device: auto                                         # 计算设备
+
+export:
+  half: true                                           # FP16 (分类推荐开启, 几乎无损)
+  dynamic: true                                        # 动态尺寸 (分类推荐开, 支持可变batch)
+  simplify: true                                       # ONNX图简化 (推荐开启)
+  opset: null                                          # opset版本 (null=自动)
+  nms: false                                           # 嵌入NMS (分类不需要NMS)
+  int8: true                                           # INT8量化 (分类推荐开启, 精度影响极小)
+  fraction: 1.0                                        # 校准数据集比例
+  keras: false                                         # Keras导出 (ONNX不使用)
+
+output:
+  path: null
+  verbose: true
+
+verify:
+  enabled: true
+  source: null

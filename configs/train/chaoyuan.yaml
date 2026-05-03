@@ -3,8 +3,6 @@
 # 车辆/行人/车窗检测任务 - YOLO26n 从头训练
 # 硬件: 16G 显存, 单 HDD
 
-mode: train
-
 model:
   name: yolo26n.yaml                          # .yaml 从头建网络, .pt 加载预训练权重
   pretrained: false                           # False=从头训练, True/路径=加载权重

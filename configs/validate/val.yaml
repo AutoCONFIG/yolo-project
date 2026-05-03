@@ -1,39 +1,40 @@
 # YOLO Validation Configuration
 # ==============================
-# Validation mode configuration file
-
-mode: val
+# 模型验证/评估配置
+# 用于评估训练好的模型在验证集/测试集上的性能指标
 
 # Model settings
 model:
-  name: yolo26n.pt  # Or path to trained model: runs/detect/train/weights/best.pt
+  name: yolo26n.pt                             # 模型路径 (.pt预训练 或训练权重如 runs/detect/train/weights/best.pt)
+  imgsz: 640                                   # 输入图像尺寸 (640=标准, 与训练时保持一致)
+  batch: 16                                    # 验证批次大小 (越大越快, 但显存占用更多)
+  device: null                                 # 计算设备: null=自动, "0"=第一块GPU, "0,1"=多卡, "cpu"=CPU
+  classes: null                                # 类别过滤 (null=全部类别, [0,1]=只评估指定类别)
 
 # Data settings
 data:
-  config: coco8.yaml
-  split: val  # val, test, train
-
-# Validation settings
-train:
-  imgsz: 640
-  batch: 16
-  device: null  # auto
+  config: coco8.yaml                           # 数据集配置文件 (YOLO格式YAML)
+  split: val                                   # 评估数据集划分: val=验证集, test=测试集, train=训练集
 
 validation:
-  conf: 0.25
-  iou: 0.7
-  plots: true
-  save_json: false
-  dnn: false
-  agnostic_nms: false
-  classes: null  # e.g. [0, 1] for specific classes
-  augment: false
-  half: false
-  max_det: 300
+  conf: 0.25                                   # 置信度阈值 (0.25=只保留>25%的检测框)
+  iou: 0.7                                     # NMS IoU阈值 (0.7=IoU>0.7的重叠框合并)
+  max_det: 300                                 # 每图最大检测数 (300=最多输出300个框)
+  half: false                                  # FP16半精度验证 (true=快但精度略低, false=FP32精度更高)
+  plots: true                                  # 生成验证可视化图 (true=生成PR曲线/混淆矩阵等)
+  save_json: false                             # 保存COCO格式JSON结果 (用于COCO官方评估工具)
+  save_conf: false                             # 保存置信度到txt标签 (true=每个标签含置信度分数)
+  dnn: false                                   # 使用OpenCV DNN进行ONNX推理验证 (true=用OpenCV而非PyTorch)
+  agnostic_nms: false                          # 类别无关NMS (true=不同类别的框也做NMS, 通常关闭)
+  augment: false                               # TTA测试时增强 (true=多尺度增强验证, 慢但精度略高)
+  rect: false                                  # 矩形验证 (true=减少padding加速, 但可能略降精度)
+  int8: false                                  # INT8量化推理验证 (true=INT8模型验证, 需导出时开启INT8)
+  end2end: null                                # 端到端检测头 (null=自动, true=YOLO26/YOLOv10免NMS推理)
 
+# Output settings
 output:
-  verbose: true
-
-# Misc
-cfg:
-tracker: botsort.yaml
+  project: null                                # 项目保存目录 (null=默认runs/)
+  name: null                                   # 实验名称 (null=自动生成)
+  save_period: -1                              # 每N轮保存权重 (-1=只保存best/last)
+  exist_ok: false                              # true=覆盖已有目录, false=自动递增名称
+  verbose: true                                # 详细输出 (true=显示详细验证日志)

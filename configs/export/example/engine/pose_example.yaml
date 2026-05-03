@@ -1,0 +1,30 @@
+# TensorRT Pose Export Configuration - Example
+# ================================================================
+# 姿态估计模型 TensorRT (engine) 导出配置示例
+# 姿态模型在 GPU 上 TensorRT 推理速度优势明显
+
+model:
+  path: runs/pose/train/weights/best.pt                # 姿态模型路径
+  format: engine                                       # 导出格式: engine (TensorRT)
+  imgsz: 640                                           # 输入尺寸 (与训练一致)
+  batch: 1                                             # 批次大小
+  device: 0                                            # 必须指定GPU
+
+export:
+  half: true                                           # FP16 (姿态模型强烈推荐, 关键点几乎无损)
+  dynamic: false                                       # 动态尺寸 (姿态模型建议固定尺寸)
+  simplify: true                                       # ONNX图简化 (推荐先简化ONNX再转TRT)
+  opset: null                                          # opset版本 (null=自动)
+  nms: false                                           # 嵌入NMS (按需开启)
+  int8: false                                          # INT8量化 (姿态关键点精度敏感, 谨慎使用)
+  fraction: 1.0                                        # 校准数据集比例
+  workspace: 8                                          # 工作空间 (GB, 姿态模型建议8+)
+  keras: false                                         # Keras导出 (TensorRT不使用)
+
+output:
+  path: null
+  verbose: true
+
+verify:
+  enabled: true
+  source: null

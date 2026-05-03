@@ -22,20 +22,18 @@ Usage:
 """
 
 import argparse
+import sys
 from pathlib import Path
+
+# 确保项目根目录在 sys.path 中, 以便导入 utils
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import cv2
 import numpy as np
 
-# ========== 硬编码配置（修改这里即可，命令行参数可覆盖） ==========
-CONFIG = {
-    "labels": r"D:\parking_pose\labels",       # 标签目录或单个txt文件路径
-    "images": [r"D:\parking_pose\images"],         # 图片目录列表（可多个）
-    "save_dir": r"D:\vis_labeled", # 保存目录（设为 None 则必须用 --browse）
-    "browse": False,                          # 交互式浏览
-    "filter_empty": False,                    # 跳过无标注图片
-}
-# ====================================================================
+from utils.config import IMG_EXTENSIONS, draw_dashed_line
+
+
 
 # ========== 默认参数 ==========
 DEFAULT_KPT_SHAPE = (4, 3)  # 4个关键点，每个3维 (x, y, visibility)
@@ -48,8 +46,6 @@ DEFAULT_KPT_COLORS = [
 ]
 DEFAULT_SKELETON = [(0, 1), (1, 2), (2, 3), (3, 0)]  # 顺时针连线
 KPT_NAMES = ["front_left", "front_right", "rear_right", "rear_left"]
-
-IMG_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.bmp', '.tif', '.tiff'}
 # ================================
 
 
@@ -92,23 +88,6 @@ def parse_label_file(label_path: Path, kpt_shape: tuple[int, int]):
                 continue
 
     return annotations
-
-
-def _draw_dashed_line(img, pt1, pt2, color, thickness, dash_len=8, gap_len=4):
-    """绘制虚线。"""
-    x1, y1 = pt1
-    x2, y2 = pt2
-    dist = max(abs(x2 - x1), abs(y2 - y1))
-    if dist == 0:
-        return
-    for i in range(0, dist, dash_len + gap_len):
-        s = i / dist
-        e = min(i + dash_len, dist) / dist
-        sx = int(x1 + (x2 - x1) * s)
-        sy = int(y1 + (y2 - y1) * s)
-        ex = int(x1 + (x2 - x1) * e)
-        ey = int(y1 + (y2 - y1) * e)
-        cv2.line(img, (sx, sy), (ex, ey), color, thickness)
 
 
 def draw_annotations(
@@ -166,7 +145,7 @@ def draw_annotations(
                     cv2.line(img, pt1, pt2, (200, 200, 200), skeleton_thickness)
                 else:
                     # 至少一个不可见: 虚线
-                    _draw_dashed_line(img, pt1, pt2, (100, 100, 100), skeleton_thickness)
+                    draw_dashed_line(img, pt1, pt2, (100, 100, 100), skeleton_thickness)
 
         # 绘制关键点
         for idx, (kx, ky, v) in enumerate(kpts):
@@ -315,13 +294,13 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
-    parser.add_argument("--labels", type=str, default=CONFIG["labels"],
+    parser.add_argument("--labels", type=str, default=None,
                         help="标签目录或单个txt文件路径")
-    parser.add_argument("--images", type=str, nargs="+", default=CONFIG["images"],
+    parser.add_argument("--images", type=str, nargs="+", default=[],
                         help="图片目录（可指定多个，按优先级搜索）")
-    parser.add_argument("--save-dir", type=str, default=CONFIG["save_dir"],
+    parser.add_argument("--save-dir", type=str, default=None,
                         help="保存可视化结果的目录（不指定则必须用 --browse）")
-    parser.add_argument("--browse", action="store_true", default=CONFIG["browse"],
+    parser.add_argument("--browse", action="store_true", default=False,
                         help="交互式逐张浏览")
     parser.add_argument("--kpt-shape", type=int, nargs=2, default=DEFAULT_KPT_SHAPE,
                         metavar=("N_KPT", "N_DIM"),
@@ -340,7 +319,7 @@ def main():
                         help="显示类别标签 (默认开启)")
     parser.add_argument("--no-labels", action="store_false", dest="show_labels",
                         help="不显示类别标签")
-    parser.add_argument("--filter-empty", action="store_true", default=CONFIG["filter_empty"],
+    parser.add_argument("--filter-empty", action="store_true", default=False,
                         help="跳过没有标注的图片")
 
     args = parser.parse_args()
@@ -348,6 +327,8 @@ def main():
     args.kpt_colors = DEFAULT_KPT_COLORS
     args.skeleton = DEFAULT_SKELETON
 
+    if not args.labels:
+        parser.error("--labels 是必需的，请指定标签目录或文件")
     if not args.browse and not args.save_dir:
         parser.error("请指定 --save-dir 或使用 --browse")
 

@@ -14,7 +14,6 @@ def parse_args():
     return p.parse_args()
 
 def analyze_split(root: Path, split: str, names: list):
-    img_dir = root / "images" / split
     lbl_dir = root / "labels" / split
     if not lbl_dir.exists():
         return None
