@@ -26,6 +26,7 @@ from utils.config import (
     get_nested_value,
     load_yaml_config,
     merge_configs,
+    resolve_config_value,
     set_boolean_argument,
     setup_ultralytics_path,
     to_bool,
@@ -33,7 +34,6 @@ from utils.config import (
 
 setup_ultralytics_path()
 from ultralytics import YOLO
-
 
 # ─── Argument parser ─────────────────────────────────────────────────
 
@@ -130,9 +130,10 @@ def args_to_config(args: argparse.Namespace) -> Dict[str, Any]:
     """将命令行参数转换为嵌套配置字典。"""
     config = {}
 
-    # Model
+    # Model (imgsz/batch/device 也属于 model 节，与 validate() 读取一致)
     model_cfg = config_from_args(
-        args, plain=("model", "task", "classes"), rename={"model": "name"}
+        args, plain=("model", "task", "classes", "imgsz", "batch", "device"),
+        rename={"model": "name"}
     )
     if model_cfg:
         config["model"] = model_cfg
@@ -143,11 +144,6 @@ def args_to_config(args: argparse.Namespace) -> Dict[str, Any]:
     )
     if data_cfg:
         config["data"] = {**config.get("data", {}), **data_cfg}
-
-    # Training (shared: imgsz, batch, device)
-    train_cfg = config_from_args(args, plain=("imgsz", "batch", "device"))
-    if train_cfg:
-        config["train"] = {**config.get("train", {}), **train_cfg}
 
     # Validation
     val_cfg = config_from_args(
@@ -181,11 +177,10 @@ def validate(config: Dict):
     val_args = {
         "data": get_nested_value(config, "data", "config", default="coco8.yaml"),
         "split": get_nested_value(config, "data", "split", default="val"),
-        "imgsz": get_nested_value(config, "model", "imgsz", default=640),
-        "batch": get_nested_value(config, "model", "batch", default=16),
-        "conf": get_nested_value(config, "validation", "conf", default=0.25),
+        "imgsz": resolve_config_value(config, ("model", "imgsz"), ("train", "imgsz"), default=640),
+        "batch": resolve_config_value(config, ("model", "batch"), ("train", "batch"), default=16),
         "iou": get_nested_value(config, "validation", "iou", default=0.7),
-        "plots": get_nested_value(config, "validation", "plots", default=False),
+        "plots": get_nested_value(config, "validation", "plots", default=True),
         "save_json": get_nested_value(config, "validation", "save_json", default=False),
         "dnn": get_nested_value(config, "validation", "dnn", default=False),
         "agnostic_nms": get_nested_value(config, "validation", "agnostic_nms", default=False),
@@ -195,8 +190,13 @@ def validate(config: Dict):
         "verbose": get_nested_value(config, "output", "verbose", default=True),
     }
 
+    # conf 默认不传递，让后端使用自己的默认值 (val 时默认 0.001)
+    conf = get_nested_value(config, "validation", "conf")
+    if conf is not None:
+        val_args["conf"] = conf
+
     # 可选参数: 仅在配置中显式设置时才传递
-    device = get_nested_value(config, "model", "device")
+    device = resolve_config_value(config, ("model", "device"), ("train", "device"))
     if device is not None:
         val_args["device"] = device
 
@@ -289,7 +289,7 @@ def main():
             config = load_yaml_config(args.config)
 
         cli_config = args_to_config(args)
-        config = merge_configs(config, cli_config)
+        config = merge_configs(config, cli_config)  # YAML in base, CLI in override = CLI wins
 
         validate(config)
     except KeyboardInterrupt:

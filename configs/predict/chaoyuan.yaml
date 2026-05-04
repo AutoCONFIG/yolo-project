@@ -1,60 +1,41 @@
 # YOLO Inference Configuration
 # =============================
 # 推理配置文件 - 潮源模型部署
+# 适用任务: detect (目标检测)
 
 # Model settings
 model:
-  path: D:\best.pt                            # 模型路径 (.pt 或 .onnx 格式)
-  format: auto                                # 模型格式: auto=自动检测, pytorch=PyTorch, onnx=ONNX
-  imgsz: 640                                  # 输入图像尺寸 (640=标准, 800/960=小目标但慢)
-  device: cuda                                # 运行设备: auto=自动, cpu=CPU, cuda=GPU, 0=指定GPU
-  batch: 64                                   # 批次大小 (16G显存建议32-64, 视频逐帧处理)
-  classes: null                               # 类别过滤 (null=所有类, [0,2]=只检测人/车等)
-  stream: false                               # 流式推理模式 (视频/大文件省内存, 长视频必开)
-  half: false                                 # FP16半精度 (提速2x+, 几乎无损精度, 推荐开启)
-  augment: false                              # TTA测试时增强 (精度提升但更慢, 小数据集可用)
-  vid_stride: 1                               # 视频帧间隔 (1=每帧处理, 5=每5帧处理1帧省时间)
-  int8: false                                 # INT8量化推理 (最快, 边缘设备适用, 精度稍降)
-  visualize: false                            # 可视化模型中间特征 (调试/教学用, 正常推理关闭)
-  embed: null                                 # 提取特征嵌入 (指定层索引如[0,1,2], 下游任务用)
+  path: ./runs/chaoyuan/20260501/weights/best.pt  # 模型路径 (.pt 或 .onnx)
+  imgsz: 640                                      # 输入图像尺寸
+  device: cuda                                    # 运行设备: auto, cpu, cuda, 0
+  batch: 64                                       # 批次大小 (64适合16G显存)
+  stream: false                                   # 流式推理模式
 
 # Input/Output settings
 io:
-  input: D:\20260430任务_1                   # 输入路径 (图片/目录/视频/URL)
-  output: runs/predict                      # 输出目录 (默认相对路径)
-  save_vis: true                              # 保存可视化结果 (绘制检测框的图片)
-  save_json: false                            # 保存JSON格式结果 (便于程序解析)
-  save_txt: true                              # 保存YOLO格式标签 (.txt文件)
-  save_crop: false                            # 保存裁剪的目标 (每个目标单独图片)
-  save_frames: false                          # 保存视频帧为单独图片 (视频处理时用)
+  input: C:\Users\maoer\Desktop\20260430任务_1                        # 输入路径 (图片/目录/视频)
+  output: runs/predict                            # 输出目录
+  save_vis: true                                  # 保存可视化结果
+  save_json: false                                # 保存JSON结果
+  save_txt: true                                  # 保存YOLO格式标签
 
 # NMS (Non-Maximum Suppression) settings
 nms:
-  conf: 0.65                                  # 置信度阈值 (0.65=只保留高置信度, 降低可增召回)
-  iou: 0.7                                    # NMS IoU阈值 (0.7=IoU>0.7合并为同一目标)
-  max_det: 100                                # 最大检测数 (每图最多输出100个框)
-  agnostic: true                              # 类别无关NMS (true=同类/不同类都合并, 密集场景用)
-  kpt_thres: 0.5                              # 关键点置信度阈值 (姿态估计用, 低于此值未标注)
-  topk: 5                                     # 返回前k个类别 (图像分类专用)
+  conf: 0.7                                       # 置信度阈值
+  iou: 0.7                                        # NMS IoU阈值
+  max_det: 100                                    # 最大检测数
+  agnostic_nms: true                              # 类别无关NMS
 
 # Visualization settings
 visualization:
-  box_thickness: 2                            # 框线粗细 (像素值, 建议2-3)
-  font_scale: 0.5                             # 字体大小 (0.5=适中, 大图可调大)
-  show_labels: true                           # 显示类别标签 (true=显示类名)
-  show_conf: true                             # 显示置信度 (true=显示0.85等分数)
-  line_width: null                            # 框线宽度 (null=自动计算, 覆盖box_thickness)
-  # Skeleton connections for pose keypoints (closed loop: 0→1→2→3→0)
-  # Parking spot 4-keypoint order: front_left, front_right, rear_right, rear_left
-  skeleton: [[0, 1], [1, 2], [2, 3], [3, 0]]
-  kpt_names:
-    0: [front_left, front_right, rear_right, rear_left]
+  box_thickness: 2                                # 框线粗细
+  font_scale: 0.5                                 # 字体大小
+  show_labels: true                               # 显示类别标签
+  show_conf: true                                 # 显示置信度
 
-# Video settings
+# Video settings (仅视频输入时生效)
 video:
-  fps: null                                   # 输出视频FPS (null=保持原FPS, 可强制指定)
-  codec: "mp4v"                               # 视频编码器 (mp4v=兼容性好, xvid/h264=质量高)
-  stream_buffer: false                        # 流缓冲 (false=保留最新帧, true=缓冲全部帧)
+  codec: mp4v                                     # 视频编码器
 
 # Other settings
-verbose: true                                 # 详细输出 (true=显示处理进度信息)
+verbose: true                                     # 详细输出

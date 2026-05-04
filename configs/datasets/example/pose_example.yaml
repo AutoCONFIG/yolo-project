@@ -18,7 +18,7 @@ flip_idx: [0, 2, 1, 4, 3, 6, 5, 8, 7, 10, 9, 12, 11, 14, 13, 16, 15]
 
 # 类别名称映射 (class_id: class_name)
 # 姿态估计通常只有一个类别 (person)
-names:
+names:  # 类别名称映射 {class_id: class_name}
   0: person                                      # 0=人
 
 # 可选: 自动下载数据集的URL或脚本

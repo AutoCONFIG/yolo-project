@@ -449,7 +449,7 @@ def main():
             config = load_yaml_config(args.config)
 
         cli_config = args_to_config(args)
-        config = merge_configs(config, cli_config)
+        config = merge_configs(config, cli_config)  # YAML in base, CLI in override = CLI wins
 
         export(config)
     except KeyboardInterrupt:

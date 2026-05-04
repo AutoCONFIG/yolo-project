@@ -6,8 +6,33 @@ import cv2
 import numpy as np
 
 from core.types import ImageResult
-from utils.config import draw_dashed_line
 from utils.constants import COLOR_GRAY, COLOR_GREEN, COLOR_ORANGE, COLOR_WHITE
+
+
+def draw_dashed_line(
+    img,
+    pt1: tuple,
+    pt2: tuple,
+    color: tuple,
+    thickness: int = 1,
+    dash_len: int = 10,
+    gap_len: int = 6,
+) -> None:
+    """在两点之间绘制虚线。"""
+    x1, y1 = pt1
+    x2, y2 = pt2
+    dist = np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+    if dist < 1:
+        return
+    dashes = int(dist / (dash_len + gap_len)) + 1
+    for i in range(dashes):
+        s = i * (dash_len + gap_len) / dist
+        e = min((i * (dash_len + gap_len) + dash_len) / dist, 1.0)
+        sx = int(x1 + (x2 - x1) * s)
+        sy = int(y1 + (y2 - y1) * s)
+        ex = int(x1 + (x2 - x1) * e)
+        ey = int(y1 + (y2 - y1) * e)
+        cv2.line(img, (sx, sy), (ex, ey), color, thickness)
 
 
 def draw_detections(
@@ -21,6 +46,7 @@ def draw_detections(
     mask_alpha: float = 0.4,
     kpt_radius: int = 5,
     kpt_line: bool = True,
+    line_width: Optional[int] = None,
     skeleton: Optional[List[Tuple[int, int]]] = None,
     kpt_names: Optional[Dict[int, List[str]]] = None,
 ) -> np.ndarray:
@@ -104,9 +130,8 @@ def draw_detections(
         # 分割掩码
         if det.mask is not None:
             mask = det.mask.astype(bool)
-            output[mask] = (output[mask] * (1 - mask_alpha) + np.array(color) * mask_alpha).astype(
-                np.uint8
-            )
+            color_array = np.array(color, dtype=np.uint8)
+            output[mask] = (output[mask].astype(np.float32) * (1 - mask_alpha) + color_array * mask_alpha).astype(np.uint8)
             contours, _ = cv2.findContours(
                 det.mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
             )
@@ -125,10 +150,12 @@ def draw_detections(
             def _get_vis(kpt_arr, idx):
                 if len(kpt_arr) > 2:
                     v = kpt_arr[2]
-                    if v >= 1.5:
+                    if v >= 1.5:          # training label v=2 (visible)
                         return 2
-                    elif v >= 0.5:
+                    elif v == 1.0:        # training label v=1 (occluded)
                         return 1
+                    elif v >= 0.5:        # inference confidence >= 0.5 (visible)
+                        return 2
                     else:
                         return 0
                 return 2

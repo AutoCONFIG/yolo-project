@@ -1,36 +1,20 @@
-# Parking Spot Pose Dataset
-# =========================
-# 停车位关键点检测数据集配置
-# 适用任务: 姿态估计/关键点检测 (pose)
-# 关键点定义: 停车位四角 (前左-前右-后右-后左, 顺时针)
-# 实际场景: 图像中因透视畸变呈凸四边形, 非规则矩形
+# Parking Spot Pose Dataset Configuration
+# =======================================
+# 停车位关键点检测数据集
+# 适用任务: pose
 
-# 数据集根路径 (绝对路径, 需根据实际环境修改)
-path: /media/yun/de2a43ce-446c-4a62-99b3-8ddc6ea1ef87/datasets/parking_pose
+path: /media/yun/de2a43ce-446c-4a62-99b3-8ddc6ea1ef87/datasets/parking_pose  # 数据集根目录路径 (相对路径或绝对路径)
 
-# 数据集划分路径 (相对于 path 的相对路径)
-train: images/train                                     # 训练集图像目录
-val: images/val                                         # 验证集图像目录
-# test: images/test                                     # 测试集 (可选)
+train: images/train
+val: images/val  # 验证集图像目录 (相对于path)
 
-# 关键点形状配置
-# kpt_shape: [关键点数量, 每个关键点的维度]
-# 维度=3表示 (x, y, visibility): visibility=2表示可见, 1表示遮挡, 0表示不可见
-kpt_shape: [4, 3]                                      # 4个关键点 (四角), 每个点3维 (x, y, visibility)
+# 关键点形状: [数量, 维度(3=x,y,visibility)]
+kpt_shape: [4, 3]
+# 水平翻转时的关键点索引映射
+flip_idx: [1, 0, 3, 2]
 
-# 关键点水平翻转时的索引映射
-# flip_idx: 水平翻转时关键点的新索引
-# 例如: 前左(0) <-> 前右(1), 后右(2) <-> 后左(3)
-flip_idx: [1, 0, 3, 2]                                  # 水平翻转时的关键点索引映射
+names:  # 类别名称映射 {class_id: class_name}
+  0: parking_spot
 
-# 类别定义
-names:
-  0: parking_spot                                        # 0=停车位 (单一类别)
-
-# 每个类别的关键点名称 (用于可视化和调试)
 kpt_names:
-  0:
-    - front_left                                         # 0=前左角 (靠近摄像机的一侧左角)
-    - front_right                                        # 1=前右角 (靠近摄像机的一侧右角)
-    - rear_right                                         # 2=后右角 (远离摄像机的一侧右角)
-    - rear_left                                          # 3=后左角 (远离摄像机的一侧左角)
+  0: [front_left, front_right, rear_right, rear_left]

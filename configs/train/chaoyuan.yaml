@@ -14,87 +14,73 @@ data:
 
 train:
   epochs: 500                                 # 总训练轮数 (早停会提前结束)
-  time:                                       # 最大训练时间(小时), 设置后覆盖 epochs
   batch: 52                                   # 每批次图像数 (16G 显存建议 32-64)
-  imgsz: 640                                  # 输入图像尺寸 (640=标准, 800/960=小目标但慢)
+  imgsz: 640                                  # 输入图像尺寸
   device: null                                # null=自动, "0"=第一块GPU, "0,1"=多卡
-  workers: 4                                  # 数据加载进程 (单 HDD 建议 1-2, SSD 建议 4-8, RAM 缓存建议 0-4)
+  workers: 4                                  # 数据加载进程 (单 HDD 建议 1-2)
   resume: true                                # true=从 last.pt 恢复训练
-  patience: 50                                # 早停耐心值 (连续 N 轮 mAP 不提升则停止)
-  cache: disk                                 # True/'ram'=内存缓存(需大内存), 'disk'=磁盘缓存, False=不缓存
-  save: True                                  # 是否保存训练权重
-  amp: True                                   # 自动混合精度训练 (FP16, 加速+省显存)
-  rect: false                                 # 矩形推理训练 (加速但可能影响精度, 通常关闭)
-  single_cls: false                           # 单类别模式 (所有目标视为同一类, 多类检测关闭)
-  fraction: 1.0                               # 使用数据集比例 (1.0=全部, 0.5=一半, 用于快速实验)
-  classes:                                    # 过滤训练类别 (如 [0, 1], null=全部类别)
-  freeze:                                     # 冻结前 N 层 (如 10=冻结 backbone, 微调预训练模型时用)
-  multi_scale: 0.3                            # 多尺度训练 (0.3=图像在 0.7x~1.3x 间随机缩放)
-  compile: false                              # PyTorch 编译优化 (true=加速计算, IO 瓶颈时不建议开启)
-  end2end: true                               # YOLO26 端到端检测 (true=免 NMS)
-  nbs: 52                                     # 名义批次大小 (用于学习率缩放, 建议等于 batch)
-  profile: false                              # 性能分析 (true=分析 ONNX/TensorRT 导出速度)
-  augmentations:                              # 自定义 Albumentations 增强 (null=使用默认)
+  patience: 50                                # 早停耐心值
+  cache: disk                                 # ram/disk/False
+  save: true                                  # 是否保存训练权重
+  amp: true                                   # 自动混合精度训练
+  rect: false                                 # 矩形训练
+  single_cls: false                           # 单类别模式
+  fraction: 1.0                               # 使用数据集比例
+  freeze:                                     # 冻结层数 (如 10)
+  multi_scale: 0.3                            # 多尺度训练 (0.3=±30%)
+  compile: false                               # PyTorch 编译优化
+  end2end: true                               # YOLO26 端到端检测
+  nbs: 52                                     # 名义批次大小
 
-  optimizer: AdamW                            # AdamW=推荐, SGD=精度可能更高但调参难
-  lr0: 0.001                                  # 初始学习率 (官方: SGD=0.01, Adam/AdamW=0.001)
-  lrf: 0.01                                  # 最终学习率比例 (最终 lr = lr0 * lrf)
-  momentum: 0.937                             # SGD 动量 / Adam beta1 (YOLO 默认值)
-  weight_decay: 0.0005                        # 权重衰减 (大数据集用 0.0005, 小数据集可用 0.001)
-  cos_lr: true                                # 余弦学习率退火 (true=平滑下降, false=阶梯下降)
+  optimizer: AdamW                             # SGD/Adam/AdamW/auto
+  lr0: 0.001                                  # 初始学习率 (Adam=0.001, SGD=0.01)
+  # 余弦学习率退火
 
-  warmup_epochs: 3.0                          # 预热轮数 (训练初期 lr 从小逐渐升到 lr0)
-  warmup_momentum: 0.8                        # 预热动量 (从该值逐渐升到 momentum)
-  warmup_bias_lr: 0.1                         # 预热偏置学习率 (偏置参数使用更高 lr 加速收敛)
+  warmup_epochs: 3.0                           # 预热轮数
+  warmup_momentum: 0.8                        # 预热动量
+  warmup_bias_lr: 0.1                         # 预热偏置学习率
 
-  box: 8.5                                    # 边界框回归损失权重 (小目标检测建议提高 8.5-10)
-  cls: 0.5                                    # 分类损失权重 (通常 0.5)
-  cls_pw: 0.0                                 # 类别权重幂次 (0=禁用, 1.0=按逆频率加权, 解决类别不平衡)
-  dfl: 1.5                                    # 分布焦点损失权重 (YOLO 默认值)
+  box: 8.5                                     # 边界框损失权重
+  cls: 0.5                                    # 分类损失权重
+  cls_pw: 0.0                                 # 类别权重幂次
+  dfl: 1.5                                    # 分布焦点损失权重
 
-  close_mosaic: 100                           # 最后 N 轮关闭 Mosaic 增强 (建议 >= patience)
-  seed: 0                                     # 随机种子 (0=随机, 固定值=结果可复现)
-  deterministic: true                         # 确定性模式 (true=结果可复现但稍慢, false=更快但不可复现)
-
-  dropout: 0.0                                # 分类任务专用 (检测任务忽略)
-  overlap_mask: true                          # 分割任务专用 (检测任务忽略)
-  mask_ratio: 4                               # 分割任务专用 (检测任务忽略)
+  close_mosaic: 100                           # 最后 N 轮关闭 Mosaic
+  seed: 0                                     # 随机种子
+  deterministic: true                          # 确定性模式
 
 augmentation:
-  hsv_h: 0.015                                # HSV 色调增强 (0.015=±1.5% 色调变化)
-  hsv_s: 0.7                                  # HSV 饱和度增强 (0.7=±70% 饱和度变化)
-  hsv_v: 0.4                                  # HSV 亮度增强 (0.4=±40% 亮度变化)
-  degrees: 5.0                                # 旋转角度 (5.0=±5度, 监控场景建议 0-10)
-  translate: 0.15                             # 平移比例 (0.15=±15% 平移)
-  scale: 0.5                                  # 缩放范围 (0.5=0.5x~1.5x, 图像较大时建议 0.5-0.6)
-  shear: 3.0                                  # 剪切角度 (3.0=±3度剪切变换)
-  perspective: 0.0                            # 透视变换 (0.0=禁用, 0.001=轻微透视, 手持设备建议开启)
-  flipud: 0.0                                 # 垂直翻转概率 (0.0=禁用, 航拍/卫星图可开启)
-  fliplr: 0.5                                 # 水平翻转概率 (0.5=50%, 左右对称场景适用; 有方向性目标建议 0.0)
-  bgr: 0.0                                    # BGR 通道交换概率 (0.0=禁用, 色彩空间不一致时有用)
-  mosaic: 1.0                                 # Mosaic 拼接增强概率 (1.0=100%, 多目标场景强烈推荐)
-  mixup: 0.05                                 # MixUp 混合增强概率 (0.0-0.1, 低概率避免小目标消失)
-  cutmix: 0.0                                 # CutMix 增强概率 (0.0=禁用)
-  copy_paste: 0.0                             # 复制粘贴增强 (0.0=禁用, 需实例分割掩码才有效)
-  copy_paste_mode: flip                       # 复制粘贴模式 (flip=翻转粘贴, mixup=混合粘贴)
-  auto_augment: randaugment                   # 自动增强策略 (randaugment/autoaugment/augmix)
-  erasing: 0.4                                # 随机擦除概率 (分类任务常用, 检测通常忽略)
+  hsv_h: 0.015                                # HSV 色调增强
+  hsv_s: 0.7                                  # HSV 饱和度增强
+  hsv_v: 0.4                                  # HSV 亮度增强
+  degrees: 5.0                                # 旋转角度
+  translate: 0.15                             # 平移比例
+  scale: 0.5                                  # 缩放范围
+  shear: 3.0                                   # 剪切角度
+  perspective: 0.0                            # 透视变换
+  flipud: 0.0                                  # 垂直翻转概率
+  fliplr: 0.5                                 # 水平翻转概率
+  bgr: 0.0                                    # BGR 通道交换概率
+  mosaic: 1.0                                  # Mosaic 增强概率
+  mixup: 0.05                                 # MixUp 增强概率
+  cutmix: 0.0                                  # CutMix 增强概率
+  copy_paste: 0.0                             # 复制粘贴增强
 
 validation:
   val: true                                   # 是否进行验证
-  conf: 0.25                                  # 置信度阈值 (0.25=只保留置信度>25%的检测框)
-  iou: 0.7                                    # NMS IoU 阈值 (0.7=IoU>0.7的重叠框会被合并)
-  max_det: 300                                # 每张图最大检测数 (300=最多输出 300 个框)
-  half: false                                 # FP16 半精度验证 (true=快但精度略低, false=FP32精度更高)
-  plots: true                                 # 是否生成验证可视化图 (true=生成但稍慢, 调试用)
-  save_json: false                            # 是否保存 COCO 格式 JSON 结果
-  dnn: false                                  # 使用 OpenCV DNN 进行 ONNX 推理验证
-  agnostic_nms: false                         # 类别无关 NMS (true=不同类别的框也做 NMS, 通常关闭)
-  augment: false                              # 测试时增强 TTA (true=验证时做多尺度增强, 慢但精度略高)
+  conf: 0.25                                  # 置信度阈值
+  iou: 0.7                                    # NMS IoU 阈值
+  max_det: 300                                # 最大检测数
+  half: false                                 # FP16 半精度验证
+  plots: true                                 # 生成验证可视化图
+  save_json: false                             # 保存 COCO 格式 JSON
+  dnn: false                                  # OpenCV DNN 推理
+  agnostic_nms: false                         # 类别无关 NMS
+  augment: false                              # 测试时增强 TTA
 
 output:
-  project: runs/chaoyuan                  # 训练结果保存目录 (相对于项目根目录)
-  name: 20260501                              # 本次训练实验名称
-  save_period: -1                             # 每 N 轮保存一次权重 (-1=只保存 best/last)
-  exist_ok: true                              # true=覆盖已有目录 (从头训练时需要)
-  verbose: true                               # 是否输出详细日志
+  project: runs/chaoyuan                   # 结果保存目录
+  name: 20260501                              # 实验名称
+  save_period: -1                            # 每 N 轮保存权重
+  exist_ok: true                              # 覆盖已有目录
+  verbose: true                               # 详细日志

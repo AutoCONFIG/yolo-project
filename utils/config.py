@@ -11,12 +11,9 @@ Functions:
     to_bool: Convert 'true'/'false' string to bool.
     set_boolean_argument: Add paired --flag/--no-flag CLI arguments.
     setup_ultralytics_path: Add local ultralytics submodule to sys.path.
-    draw_dashed_line: Draw a dashed line between two points (shared cv2 utility).
 
 Constants:
     PROJECT_ROOT: Absolute path to the project root directory.
-    IMG_EXTENSIONS: Common image file extensions.
-    VIDEO_EXTENSIONS: Common video file extensions.
 """
 
 import argparse
@@ -24,8 +21,6 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-import cv2
-import numpy as np
 import yaml
 
 # ─── Project root & path setup ──────────────────────────────────────────
@@ -105,6 +100,19 @@ def get_nested_value(config: Dict, *keys, default=None):
         else:
             return default
     return current
+
+
+def resolve_config_value(config: Dict, *chain, default=None):
+    """按优先级链查找配置值，返回第一个非 None 的结果。
+
+    chain 中每个元素为 (section, key) 元组，按传入顺序依次查找。
+    若全部未命中则返回 default。
+    """
+    for section, key in chain:
+        v = get_nested_value(config, section, key)
+        if v is not None:
+            return v
+    return default
 
 
 def to_bool(value: str | bool | None) -> bool | None:
@@ -223,30 +231,3 @@ def config_from_args(
     return cfg
 
 
-# ─── Shared drawing utilities ───────────────────────────────────────────
-
-
-def draw_dashed_line(
-    img,
-    pt1: tuple,
-    pt2: tuple,
-    color: tuple,
-    thickness: int = 1,
-    dash_len: int = 10,
-    gap_len: int = 6,
-) -> None:
-    """在两点之间绘制虚线 (共享实现)。"""
-    x1, y1 = pt1
-    x2, y2 = pt2
-    dist = np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
-    if dist < 1:
-        return
-    dashes = int(dist / (dash_len + gap_len)) + 1
-    for i in range(dashes):
-        s = i * (dash_len + gap_len) / dist
-        e = min((i * (dash_len + gap_len) + dash_len) / dist, 1.0)
-        sx = int(x1 + (x2 - x1) * s)
-        sy = int(y1 + (y2 - y1) * s)
-        ex = int(x1 + (x2 - x1) * e)
-        ey = int(y1 + (y2 - y1) * e)
-        cv2.line(img, (sx, sy), (ex, ey), color, thickness)

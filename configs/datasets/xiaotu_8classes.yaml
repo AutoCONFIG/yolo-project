@@ -1,29 +1,19 @@
 # Xiaotu 8-Classes Detection Dataset
-# ====================================
-# 小图8类目标检测数据集配置
-# 适用任务: 目标检测 (detect)
-# 场景: 道路监控场景, 包含行人、骑行者、车辆等
-# 数据集来源: 小图标注平台
+# ==================================
+# 小兔8类目标检测数据集
+# 适用任务: detect
 
-# 数据集根路径 (绝对路径)
-path: /data2/kaiyun/datasets_xiaotu_label
+path: /data2/kaiyun/datasets_xiaotu_label  # 数据集根目录路径 (相对路径或绝对路径)
 
-# 数据集划分路径
-train: images/train                                     # 训练集图像目录
-val: images/val                                         # 验证集图像目录
-# test: images/test                                     # 测试集 (可选)
+train: images/train
+val: images/val  # 验证集图像目录 (相对于path)
 
-# 类别定义 (共8类)
-# 标注说明:
-# - 行人/骑行者: 必须同时标注 head_naked 或 helmet
-# - 电动车: 区分有无遮阳棚 (ebike vs ebike_canopy)
-# - 自行车/电动车/三轮车: 必须包含骑行者才算
-names:
-  0: person                                             # 0=行人 (包括行人和乘客)
-  1: head_naked                                        # 1=未戴头盔的头部 (裸露头部)
-  2: helmet                                             # 2=安全头盔 (包括各种头盔类型)
-  3: bicycle                                            # 3=自行车 (包含骑行者, 不包括静止车辆)
-  4: ebike                                              # 4=电动车 (无遮阳棚, 包含骑行者)
-  5: tricycle                                           # 5=三轮车 (包含骑行者)
-  6: mobile_phone                                       # 6=手机 (手持手机的人)
-  7: ebike_canopy                                       # 7=带遮阳棚的电动车 (包含骑行者) 
+names:  # 类别名称映射 {class_id: class_name}
+  0: person
+  1: head_naked
+  2: helmet
+  3: bicycle
+  4: ebike
+  5: tricycle
+  6: mobile_phone
+  7: ebike_canopy

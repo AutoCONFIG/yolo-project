@@ -53,7 +53,7 @@ echo "Extra args: ${EXTRA_ARGS[*]}"
 echo "=============================================="
 
 if [ -z "$CONFIG_FILE" ]; then
-    python "${SCRIPT_DIR}/yolo.py" val "${EXTRA_ARGS[@]+${EXTRA_ARGS[@]}}"
+    python "${SCRIPT_DIR}/yolo.py" val "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"
 else
-    python "${SCRIPT_DIR}/yolo.py" val --config "$CONFIG_FILE" "${EXTRA_ARGS[@]+${EXTRA_ARGS[@]}}"
+    python "${SCRIPT_DIR}/yolo.py" val --config "$CONFIG_FILE" "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"
 fi

@@ -1,30 +1,27 @@
-# TorchScript Segmentation Export Configuration - Example
-# ================================================================
-# 实例分割模型 TorchScript 导出配置示例
-# 注意: 分割模型的掩码输出在 TorchScript 中可能需要特殊后处理
+# TorchScript Segmentation Export Configuration
+# ===========================================
 
 model:
-  path: runs/segment/train/weights/best.pt             # 分割模型路径
-  format: torchscript                                  # 导出格式: torchscript
-  imgsz: 640                                           # 输入尺寸
-  batch: 1                                             # 批次大小
-  device: cpu                                          # CPU推荐
+  path: runs/segment/train/weights/best.pt  # 模型路径 (.pt 权重 或 .onnx)
+  format: torchscript  # 导出格式: onnx/torchscript/openvino/engine 等
+  imgsz: 640  # 输入图像尺寸 (默认 640, 分类建议 224)
+  batch: 1  # 批次大小 (推理默认 1, 训练默认 16)
+  device: cpu  # 计算设备: null=自动, cpu, 0, 0,1 等
 
 export:
-  half: false                                          # FP16 (CPU必须false)
-  dynamic: false                                        # 动态尺寸 (TorchScript动态支持有限)
-  simplify: false                                      # ONNX图简化 (TorchScript不需要)
-  opset: null                                          # opset版本 (不适用)
-  nms: false                                           # 嵌入NMS (分割模型通常关闭)
-  int8: false                                          # INT8量化 (TorchScript不支持INT8)
-  optimize: false                                      # 移动端优化 (移动端部署可开启)
-  fraction: 1.0                                        # 校准比例 (不适用)
-  keras: false                                         # Keras导出 (TorchScript不使用)
+  half: false  # FP16 半精度导出 (加速推理, 可能略降精度)
+  dynamic: false  # 动态输入形状 (ONNX/OpenVINO/TensorRT 支持)
+  simplify: false  # 简化 ONNX 计算图 (默认 true, 推荐开启)
+  opset: null  # ONNX opset 版本 (null=自动选择)
+  nms: false  # 在导出模型中嵌入 NMS (部分后端支持)
+  int8: false  # INT8 量化导出 (需要校准数据集)
+  optimize: false  # TorchScript 移动端优化
+  fraction: 1.0  # INT8 校准数据集使用比例 (默认 1.0)
 
 output:
-  path: null
-  verbose: true
+  path: null  # 自定义输出路径
+  verbose: true  # 详细日志输出
 
 verify:
-  enabled: true
-  source: null
+  enabled: true  # 导出后是否验证模型
+  source: null  # 验证用测试图像路径 (null=使用虚拟图像)

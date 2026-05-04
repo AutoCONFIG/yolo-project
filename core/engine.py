@@ -16,6 +16,30 @@ from utils.constants import LETTERBOX_FILL_VALUE
 setup_ultralytics_path()
 
 
+def _clip_letterbox_coords(
+    x1: float, y1: float, x2: float, y2: float,
+    pad_left: int, pad_top: int,
+    ratio: float,
+    orig_w: int, orig_h: int,
+) -> Tuple[float, float, float, float]:
+    """将 letterbox 变换后的坐标逆变换回原图坐标。
+
+    Args:
+        x1, y1, x2, y2: letterbox 坐标系中的坐标
+        pad_left, pad_top: letterbox 左/上边距
+        ratio: 缩放比例 (原图/letterbox)
+        orig_w, orig_h: 原图宽高
+
+    Returns:
+        原图坐标系中的 (x1, y1, x2, y2)
+    """
+    x1 = max(0.0, min((x1 - pad_left) / ratio, orig_w))
+    y1 = max(0.0, min((y1 - pad_top) / ratio, orig_h))
+    x2 = max(0.0, min((x2 - pad_left) / ratio, orig_w))
+    y2 = max(0.0, min((y2 - pad_top) / ratio, orig_h))
+    return x1, y1, x2, y2
+
+
 class YOLOInference:
     """YOLO 推理引擎，支持 PyTorch 和 ONNX 模型。"""
 
@@ -39,6 +63,9 @@ class YOLOInference:
         save_frames: bool = False,
         stream_buffer: bool = False,
         save_conf: bool = False,
+        dnn: bool = False,
+        end2end: Optional[bool] = None,
+        show: bool = False,
     ):
         self.model_path = Path(model_path)
         self.nms_config = nms_config or NMSConfig()
@@ -58,11 +85,15 @@ class YOLOInference:
         self.save_frames = save_frames
         self.stream_buffer = stream_buffer
         self.save_conf = save_conf
+        self.dnn = dnn
+        self.end2end = end2end
+        self.show = show
 
         self.model_format = self._detect_format()
         self.model = None
         self.ort_session = None
         self.classes: Dict[int, str] = {}
+        self.task_type = "detect"  # 默认任务类型
         self._load_model()
 
     def _detect_format(self) -> str:
@@ -86,6 +117,7 @@ class YOLOInference:
 
         self.model = YOLO(str(self.model_path))
         self.classes = self.model.names
+        self.task_type = getattr(self.model, "task", "detect")
         if self.device != "auto":
             self.model.to(self.device)
 
@@ -101,7 +133,7 @@ class YOLOInference:
         use_cuda = (
             self.device == "cuda"
             or (self.device == "auto" and "CUDAExecutionProvider" in available)
-            or (isinstance(self.device, str) and self.device.replace(",", "").replace(" ", "").isdigit())
+            or (self.device.replace(",", "").replace(" ", "").isdigit())
         )
         if use_cuda:
             providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
@@ -179,7 +211,7 @@ class YOLOInference:
             return []
 
         # 自动判断输出布局: (C, N) 或 (N, C)。当 C < N 且 C 为较小的维度时，通常为 (C, N)
-        if output.ndim == 2 and output.shape[0] < output.shape[1] and output.shape[0] <= 84:
+        if output.ndim == 2 and output.shape[0] < output.shape[1] and output.shape[0] <= 85:
             output = np.transpose(output)
 
         detections = []
@@ -193,10 +225,9 @@ class YOLOInference:
                     continue
                 class_id = int(det[5])
                 x1, y1, x2, y2 = det[:4]
-                x1 = max(0, min((x1 - pad[1]) / r, orig_w))
-                y1 = max(0, min((y1 - pad[0]) / r, orig_h))
-                x2 = max(0, min((x2 - pad[1]) / r, orig_w))
-                y2 = max(0, min((y2 - pad[0]) / r, orig_h))
+                x1, y1, x2, y2 = _clip_letterbox_coords(
+                    x1, y1, x2, y2, pad[1], pad[0], r, orig_w, orig_h
+                )
                 class_name = self.classes.get(class_id, f"class_{class_id}")
                 detections.append(
                     DetectionResult(
@@ -236,10 +267,9 @@ class YOLOInference:
 
         for idx in indices:
             x1, y1, x2, y2 = boxes_xyxy[idx]
-            x1 = max(0, min((x1 - pad[1]) / r, orig_w))
-            y1 = max(0, min((y1 - pad[0]) / r, orig_h))
-            x2 = max(0, min((x2 - pad[1]) / r, orig_w))
-            y2 = max(0, min((y2 - pad[0]) / r, orig_h))
+            x1, y1, x2, y2 = _clip_letterbox_coords(
+                x1, y1, x2, y2, pad[1], pad[0], r, orig_w, orig_h
+            )
             class_id = int(class_ids[idx])
             class_name = self.classes.get(class_id, f"class_{class_id}")
             detections.append(
@@ -306,7 +336,7 @@ class YOLOInference:
         return arr.astype(np.int64)
 
     def _predict_kwargs(self) -> dict:
-        return dict(
+        kwargs = dict(
             imgsz=self.imgsz,
             conf=self.nms_config.conf_threshold,
             iou=self.nms_config.iou_threshold,
@@ -318,17 +348,31 @@ class YOLOInference:
             half=self.half,
             augment=self.augment,
             vid_stride=self.vid_stride,
-            retina_masks=self.retina_masks,
             visualize=self.visualize,
             embed=self.embed,
             int8=self.int8,
             save_conf=self.save_conf,
-            kpt_thres=self.nms_config.kpt_thres,
-            topk=self.nms_config.topk,
-            line_width=self.line_width,
             save_frames=self.save_frames,
             stream_buffer=self.stream_buffer,
+            dnn=self.dnn,
+            show=self.show,
         )
+        # line_width: 仅在显式设置时传递
+        if self.line_width is not None:
+            kwargs["line_width"] = self.line_width
+        # end2end: 仅在显式设置时传递
+        if self.end2end is not None:
+            kwargs["end2end"] = self.end2end
+        # kpt_thres: 仅在显式设置时传递 (姿态任务关键点置信度过滤)
+        if self.nms_config.kpt_thres is not None:
+            kwargs["kpt_thres"] = self.nms_config.kpt_thres
+        # 分割任务专用: 高分辨率分割掩码
+        if self.task_type == "segment" and self.retina_masks:
+            kwargs["retina_masks"] = self.retina_masks
+        # topk: 仅在分类任务时传递给后端
+        if self.task_type == "classify" and self.nms_config.topk is not None:
+            kwargs["topk"] = self.nms_config.topk
+        return kwargs
 
     def inference_pytorch(self, image: np.ndarray) -> ImageResult:
         start_time = time.perf_counter()

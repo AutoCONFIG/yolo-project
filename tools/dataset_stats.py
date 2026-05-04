@@ -9,9 +9,28 @@ def parse_args():
     import argparse
     p = argparse.ArgumentParser()
     p.add_argument("--root", required=True, help="Dataset root path")
-    p.add_argument("--names", nargs="+", default=["car", "person", "sidewindow"], help="Class names")
+    p.add_argument("--names", nargs="+", default=None, help="Class names (optional if dataset YAML exists)")
     p.add_argument("--out", default="dataset_stats.txt", help="Output text report")
     return p.parse_args()
+
+
+def load_names_from_yaml(root: Path):
+    """尝试从数据集目录下的 YAML 文件读取类别名称。"""
+    import yaml
+    for yaml_path in root.rglob("*.yaml"):
+        try:
+            with open(yaml_path, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f)
+            if data and "names" in data:
+                names = data["names"]
+                if isinstance(names, dict):
+                    return [names[i] for i in sorted(names.keys())]
+                if isinstance(names, list):
+                    return names
+        except Exception:
+            continue
+    return None
+
 
 def analyze_split(root: Path, split: str, names: list):
     lbl_dir = root / "labels" / split
@@ -151,6 +170,12 @@ if __name__ == "__main__":
     args = parse_args()
     root = Path(args.root)
     names = args.names
+    if names is None:
+        names = load_names_from_yaml(root)
+        if names is None:
+            print("错误: 无法从数据集目录自动读取类别名称，请使用 --names 参数指定")
+            sys.exit(1)
+        print(f"自动读取类别: {names}")
 
     out_path = Path(args.out)
     with open(out_path, "w") as f:

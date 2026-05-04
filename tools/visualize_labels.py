@@ -31,20 +31,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import cv2
 import numpy as np
 
-from utils.config import IMG_EXTENSIONS, draw_dashed_line
-
+from utils.constants import IMG_EXTENSIONS, DEFAULT_KPT_SHAPE, DEFAULT_SKELETON, DEFAULT_KPT_COLORS
+from core.visualization import draw_dashed_line
 
 
 # ========== 默认参数 ==========
-DEFAULT_KPT_SHAPE = (4, 3)  # 4个关键点，每个3维 (x, y, visibility)
 DEFAULT_BOX_COLOR = (0, 255, 0)  # BGR: 绿色
-DEFAULT_KPT_COLORS = [
-    (255, 0, 0),    # 前左 - 蓝
-    (0, 255, 0),    # 前右 - 绿
-    (0, 0, 255),    # 后右 - 红
-    (255, 255, 0),  # 后左 - 青
-]
-DEFAULT_SKELETON = [(0, 1), (1, 2), (2, 3), (3, 0)]  # 顺时针连线
 KPT_NAMES = ["front_left", "front_right", "rear_right", "rear_left"]
 # ================================
 

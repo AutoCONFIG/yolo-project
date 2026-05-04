@@ -19,7 +19,7 @@ test: images/test                               # 测试集图像目录 (可选,
 # 类别名称映射 (class_id: class_name)
 # 重要: class_id 必须从 0 开始连续编号, 且与标签文件一致
 # 类别数量必须与标签文件中的最大class_id + 1 匹配
-names:
+names:  # 类别名称映射 {class_id: class_name}
   0: person                                     # 0=行人
   1: car                                        # 1=汽车
   2: dog                                        # 2=狗

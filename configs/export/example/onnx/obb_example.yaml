@@ -1,29 +1,26 @@
-# ONNX OBB Export Configuration - Example
-# ================================================================
-# 旋转框检测模型 ONNX 导出配置示例
-# 注意: OBB 模型输出包含旋转角度, 需要专用后处理解码
+# ONNX OBB Export Configuration
+# =============================
 
 model:
-  path: runs/obb/train/weights/best.pt                 # OBB模型路径 (注意 obb 目录)
-  format: onnx                                         # 导出格式: onnx
-  imgsz: 1024                                          # 输入尺寸 (OBB常用1024, 航拍/卫星图目标小)
-  batch: 1                                             # 批次大小
-  device: auto                                         # 计算设备
+  path: runs/obb/train/weights/best.pt  # 模型路径 (.pt 权重 或 .onnx)
+  format: onnx  # 导出格式: onnx/torchscript/openvino/engine 等
+  imgsz: 1024  # 输入图像尺寸 (默认 640, 分类建议 224)
+  batch: 1  # 批次大小 (推理默认 1, 训练默认 16)
+  device: auto  # 计算设备: null=自动, cpu, 0, 0,1 等
 
 export:
-  half: true                                           # FP16 (OBB推荐开启, 旋转框对精度不太敏感)
-  dynamic: true                                        # 动态尺寸 (推荐开启, OBB通常大图)
-  simplify: true                                       # ONNX图简化 (推荐开启)
-  opset: null                                          # opset版本 (null=自动)
-  nms: false                                           # 嵌入NMS (OBB推荐关闭, 后处理需旋转框解码)
-  int8: false                                          # INT8量化 (可按需开启)
-  fraction: 1.0                                        # 校准数据集比例
-  keras: false                                         # Keras导出 (ONNX不使用)
+  half: true  # FP16 半精度导出 (加速推理, 可能略降精度)
+  dynamic: true  # 动态输入形状 (ONNX/OpenVINO/TensorRT 支持)
+  simplify: true  # 简化 ONNX 计算图 (默认 true, 推荐开启)
+  opset: null  # ONNX opset 版本 (null=自动选择)
+  nms: false  # 在导出模型中嵌入 NMS (部分后端支持)
+  int8: false  # INT8 量化导出 (需要校准数据集)
+  fraction: 1.0  # INT8 校准数据集使用比例 (默认 1.0)
 
 output:
-  path: null
-  verbose: true
+  path: null  # 自定义输出路径
+  verbose: true  # 详细日志输出
 
 verify:
-  enabled: true
-  source: null
+  enabled: true  # 导出后是否验证模型
+  source: null  # 验证用测试图像路径 (null=使用虚拟图像)

@@ -1,51 +1,39 @@
-# YOLO Classification Inference Configuration - Example
-# =======================================================
-# 图像分类推理配置示例
-# 适用于: 图像类别识别、场景分类
+# YOLO Classification Inference Configuration
+# =========================================
 
-# Model settings
 model:
-  path: "runs/classify/train/weights/best.pt"   # 模型路径 (.pt 或 .onnx 格式)
-  format: auto                                  # 模型格式: auto=自动检测, pytorch=PyTorch, onnx=ONNX
-  imgsz: 224                                    # 输入图像尺寸 (224=分类标准, 384/512=更高精度但慢)
-  device: auto                                  # 运行设备: auto=自动, cpu=CPU, cuda=GPU, 0=指定GPU
-  batch: 1                                      # 批次大小 (显存足够时可加大提速)
-  classes: null                                 # 类别过滤 (分类任务通常null=全部分类)
-  stream: false                                 # 流式推理模式 (批量分类时可开启)
-  half: false                                   # FP16半精度 (提速2x+, 几乎无损精度, 推荐开启)
-  augment: false                                # TTA测试时增强 (精度提升但更慢)
-  vid_stride: 1                                 # 视频帧间隔 (分类任务通常1)
-  int8: false                                   # INT8量化推理 (最快, 边缘设备适用)
-  visualize: false                              # 可视化模型中间特征 (调试/教学用, 正常推理关闭)
-  embed: null                                   # 提取特征嵌入 (分类特征提取用)
+  path: runs/classify/train/weights/best.pt  # 模型路径 (.pt 权重 或 .onnx)
+  imgsz: 224  # 输入图像尺寸 (默认 640, 分类建议 224)
+  device: auto  # 计算设备: null=自动, cpu, 0, 0,1 等
+  batch: 1  # 批次大小 (推理默认 1, 训练默认 16)
+  stream: false  # 流式推理模式 (视频/摄像头推荐 true)
+  visualize: false  # 可视化模型特征图 (调试用)
+  augment: false  # 测试时增强 TTA (慢但可能提升精度)
+  int8: false  # INT8 量化推理 (ONNX/TensorRT 等支持)
+  dnn: false  # 使用 OpenCV DNN 进行 ONNX 推理
+  show: false  # 弹窗显示结果 (需图形界面支持)
+  save_frames: false  # 保存视频推理的每一帧为图片
+  stream_buffer: false  # 流式缓冲所有帧 (true=缓冲, false=只保留最新帧)
+  line_width:           # 后端渲染线宽 (null=自动缩放)
+  show_boxes: true      # 后端是否绘制检测框 (前端可视化开启时建议设为 false)
+  embed: null  # 特征嵌入层索引 (调试用, 默认 null)
+  save_conf: false  # 保存置信度到结果 (后端保存)
 
-# Input/Output settings
 io:
-  input: "datasets/test/images"                 # 输入路径 (图片/目录/视频/URL)
-  output: "runs/inference/classify"             # 输出目录 (默认相对路径)
-  save_vis: true                                # 保存可视化结果 (显示TopK类别)
-  save_json: false                              # 保存JSON格式结果 (包含所有类别分数)
-  save_txt: false                               # 保存分类结果txt
-  save_crop: false                              # 保存裁剪图片 (分类任务通常不需要)
-  save_frames: false                            # 保存视频帧 (视频分类用)
+  input: datasets/test/images  # 输入路径 (图片/目录/视频/URL/摄像头编号)
+  output: runs/inference/classify  # 输出目录路径
+  save_vis: true  # 保存可视化结果图片/视频
+  save_json: false  # 保存推理结果为 JSON 格式
+  save_txt: false  # 保存 YOLO 格式 txt 标签
+  save_crop: false  # 保存裁剪后的检测目标图片
 
-# Classification specific settings
-classification:
-  topk: 5                                       # 返回前k个预测类别 (5=显示Top5, 1=只显示Top1)
+nms:
+  topk: 5  # 分类 Top-K 结果数 (classify 任务专用, 默认 5)
+  agnostic_nms: false  # 类别无关 NMS (不同类别框也做 NMS)
 
-# Visualization settings
 visualization:
-  box_thickness: 2                              # 边界框线宽 (分类任务通常不显示框)
-  font_scale: 0.6                               # 标签字体大小 (0.5=标准, 0.6=稍大易读)
-  show_labels: true                             # 显示类别标签 (分类任务必开)
-  show_conf: true                             # 显示置信度值 (分类任务必开)
-  line_width: null                            # 框线宽度 (null=自动计算)
+  font_scale: 0.6  # 标签字体比例 (前端可视化, 默认 0.5)
+  show_labels: true  # 显示类别标签 (前端可视化)
+  show_conf: true  # 显示置信度分数 (前端可视化)
 
-# Video settings
-video:
-  fps: null                                     # 输出视频FPS (null=保持原FPS)
-  codec: "mp4v"                                 # 视频编码器 (mp4v=兼容性好, xvid/h264=质量高)
-  stream_buffer: false                          # 流缓冲 (false=保留最新帧)
-
-# Other settings
-verbose: true                                   # 详细输出 (true=显示处理进度信息)
+verbose: true  # 详细日志输出

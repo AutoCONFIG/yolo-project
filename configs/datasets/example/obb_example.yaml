@@ -14,7 +14,7 @@ test: images/test                               # 测试集图像目录 (可选,
 
 # 类别名称映射 (class_id: class_name)
 # 航拍/卫星图像常见类别
-names:
+names:  # 类别名称映射 {class_id: class_name}
   0: plane                                       # 0=飞机
   1: ship                                        # 1=船只
   2: storage tank                               # 2=储油罐

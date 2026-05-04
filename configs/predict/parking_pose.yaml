@@ -24,19 +24,19 @@ nms:
   conf: 0.35        # Confidence threshold
   iou: 0.4          # NMS IoU threshold
   max_det: 300      # Maximum detections per image
-  agnostic: true    # Class-agnostic NMS
+  agnostic_nms: true    # Class-agnostic NMS
 
 # Visualization settings
 visualization:
   box_thickness: 2  # Bounding box line thickness
   font_scale: 0.5   # Font scale for labels
-  show_labels: true # Show class labels
+  show_labels: true # Show class labels  # 显示类别标签 (前端可视化)
   show_conf: true   # Show confidence scores
   # Skeleton connections for pose keypoints (closed loop: 0→1→2→3→0)
   # Parking spot 4-keypoint order: front_left, front_right, rear_right, rear_left
-  skeleton: [[0, 1], [1, 2], [2, 3], [3, 0]]
+  skeleton: [[0, 1], [1, 2], [2, 3], [3, 0]]  # 关键点连接关系列表 [[i,j], ...] (pose 任务专用)
   kpt_names:
-    0: [front_left, front_right, rear_right, rear_left]
+    0: ["front_left", "front_right", "rear_right", "rear_left"]
 
 # Other settings
 verbose: true

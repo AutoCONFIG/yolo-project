@@ -57,6 +57,7 @@ Usage:
 """
 
 import argparse
+import logging
 import os
 import random
 import shutil
@@ -66,7 +67,11 @@ from pathlib import Path
 # 确保项目根目录在 sys.path 中, 以便导入 utils
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from utils.config import IMG_EXTENSIONS
+from utils.constants import IMG_EXTENSIONS
+
+# 配置日志
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+logger = logging.getLogger(__name__)
 
 # ========== 可修改的默认参数 ==========
 DEFAULT_SOURCE = ""
@@ -122,7 +127,8 @@ def detect_task_type(pairs: list[tuple[Path, Path]]) -> tuple[str, tuple[int, in
                         continue
                     n = len(parts)
                     col_counts[n] = col_counts.get(n, 0) + 1
-        except Exception:
+        except (IOError, OSError) as e:
+            logger.warning(f"跳过无法读取的文件: {txt_path}: {e}")
             continue
 
     if not col_counts:
@@ -597,7 +603,8 @@ val: images/val    # val images
                         parts = line.strip().split()
                         if parts:
                             max_cls = max(max_cls, int(parts[0]))
-            except Exception:
+            except (IOError, ValueError) as e:
+                logger.warning(f"解析类别时跳过文件: {txt_path}: {e}")
                 continue
         names_lines = "\n".join(f"  {i}: class_{i}" for i in range(max_cls + 1))
 

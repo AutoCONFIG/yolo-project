@@ -1,98 +1,81 @@
-# YOLO Pose Estimation Inference Configuration - Example
-# =======================================================
-# 姿态估计推理配置示例
-# 适用于: 人体关键点检测、姿态分析、动作识别
+# YOLO Pose Estimation Inference Configuration
+# =========================================
 
-# Model settings
 model:
-  path: "runs/pose/train/weights/best.pt"       # 模型路径 (.pt 或 .onnx 格式)
-  format: auto                                  # 模型格式: auto=自动检测, pytorch=PyTorch, onnx=ONNX
-  imgsz: 640                                    # 输入图像尺寸 (640=标准, 800=更精细关键点但慢)
-  device: auto                                  # 运行设备: auto=自动, cpu=CPU, cuda=GPU, 0=指定GPU
-  batch: 1                                      # 批次大小 (显存足够时可加大)
-  classes: null                                 # 类别过滤 (姿态任务通常null=全部关键点)
-  stream: false                                 # 流式推理模式 (视频姿态分析必开省内存)
-  half: false                                   # FP16半精度 (提速2x+, 几乎无损精度, 推荐开启)
-  augment: false                                # TTA测试时增强 (精度提升但更慢)
-  vid_stride: 1                                 # 视频帧间隔 (1=每帧处理, 3=每3帧处理1帧)
-  int8: false                                   # INT8量化推理 (最快, 边缘设备适用)
-  visualize: false                              # 可视化模型中间特征 (调试/教学用, 正常推理关闭)
-  embed: null                                   # 提取特征嵌入 (姿态特征提取用)
+  path: runs/pose/train/weights/best.pt  # 模型路径 (.pt 权重 或 .onnx)
+  imgsz: 640  # 输入图像尺寸 (默认 640, 分类建议 224)
+  device: auto  # 计算设备: null=自动, cpu, 0, 0,1 等
+  batch: 1  # 批次大小 (推理默认 1, 训练默认 16)
+  stream: false  # 流式推理模式 (视频/摄像头推荐 true)
+  vid_stride: 1  # 视频跳帧间隔 (1=每帧处理, 2=隔一帧处理)
+  visualize: false  # 可视化模型特征图 (调试用)
+  augment: false  # 测试时增强 TTA (慢但可能提升精度)
+  int8: false  # INT8 量化推理 (ONNX/TensorRT 等支持)
+  dnn: false  # 使用 OpenCV DNN 进行 ONNX 推理
+  show: false  # 弹窗显示结果 (需图形界面支持)
+  save_frames: false  # 保存视频推理的每一帧为图片
+  stream_buffer: false  # 流式缓冲所有帧 (true=缓冲, false=只保留最新帧)
+  line_width:           # 后端渲染线宽 (null=自动缩放)
+  show_boxes: true      # 后端是否绘制检测框 (前端可视化开启时建议设为 false)
+  embed: null  # 特征嵌入层索引 (调试用, 默认 null)
+  save_conf: false  # 保存置信度到结果 (后端保存)
 
-# Input/Output settings
 io:
-  input: "datasets/test/images"                 # 输入路径 (图片/目录/视频/URL/摄像头)
-  output: "runs/inference/pose"                 # 输出目录 (默认相对路径)
-  save_vis: true                                # 保存可视化结果 (带骨架连线的人体图)
-  save_json: false                              # 保存JSON格式结果 (包含关键点坐标)
-  save_txt: false                               # 保存关键点txt (YOLO格式关键点)
-  save_crop: false                              # 保存裁剪的人体图片
-  save_frames: false                            # 保存视频帧为单独图片
+  input: datasets/test/images  # 输入路径 (图片/目录/视频/URL/摄像头编号)
+  output: runs/inference/pose  # 输出目录路径
+  save_vis: true  # 保存可视化结果图片/视频
+  save_json: false  # 保存推理结果为 JSON 格式
+  save_txt: false  # 保存 YOLO 格式 txt 标签
+  save_crop: false  # 保存裁剪后的检测目标图片
 
-# NMS (Non-Maximum Suppression) settings
 nms:
-  conf: 0.25                                    # 置信度阈值 (0.25=只保留>25%的检测, 提高可增召回)
-  iou: 0.7                                      # NMS IoU阈值 (0.7=IoU>0.7合并为同一目标)
-  max_det: 300                                  # 最大检测数 (每图最多输出300个框)
-  agnostic: false                               # 类别无关NMS (true=同类/不同类都合并, 密集场景用)
+  conf: 0.25  # 置信度阈值 (默认 0.25)
+  iou: 0.7  # NMS IoU 阈值 (默认 0.7, 越大保留越多框)
+  max_det: 300  # 每图最大检测数 (默认 300)
+  kpt_thres: 0.5  # 关键点置信度阈值 (pose 任务专用, 默认 0.5)
+  agnostic_nms: false  # 类别无关 NMS (不同类别框也做 NMS)
 
-# Pose estimation specific settings
-pose:
-  kpt_thres: 0.5                                # 关键点置信度阈值 (0.5=显示>50%置信度的关键点)
-  skeleton:                                     # 骨架连接定义 (关键点索引对, 用于绘制人体连线)
-    - [16, 14]                                  # 右眼到右耳
-    - [14, 12]                                  # 右耳到右肩
-    - [17, 15]                                  # 左眼到左耳
-    - [15, 13]                                  # 左耳到左肩
-    - [12, 13]                                  # 右肩到左肩
-    - [6, 12]                                   # 右肩到右髋
-    - [7, 13]                                   # 左肩到左髋
-    - [6, 7]                                    # 右髋到左髋
-    - [6, 8]                                    # 右髋到右膝
-    - [7, 9]                                    # 左髋到左膝
-    - [8, 10]                                   # 右膝到右脚踝
-    - [9, 11]                                   # 左膝到左脚踝
-    - [2, 3]                                    # 右眼到鼻子
-    - [1, 2]                                    # 右眼到右眼外
-    - [1, 3]                                    # 左眼到鼻子
-    - [2, 4]                                    # 右眼到右耳
-    - [3, 5]                                    # 左眼到左耳
-    - [4, 6]                                    # 右耳到右肩
-    - [5, 7]                                    # 左耳到左肩
-  kpt_names:                                    # 关键点名称列表 (COCO标准17关键点)
-    - nose                                      # 0 鼻子
-    - left_eye                                  # 1 左眼
-    - right_eye                                 # 2 右眼
-    - left_ear                                  # 3 左耳
-    - right_ear                                 # 4 右耳
-    - left_shoulder                             # 5 左肩
-    - right_shoulder                            # 6 右肩
-    - left_elbow                                # 7 左肘
-    - right_elbow                               # 8 右肘
-    - left_wrist                                # 9 左手腕
-    - right_wrist                               # 10 右手腕
-    - left_hip                                  # 11 左髋
-    - right_hip                                 # 12 右髋
-    - left_knee                                 # 13 左膝
-    - right_knee                                # 14 右膝
-    - left_ankle                                # 15 左脚踝
-    - right_ankle                               # 16 右脚踝
-  kpt_radius: 5                                 # 关键点半径像素 (3=小, 5=标准, 7=大)
-  kpt_line: true                                # 绘制骨架连线 (true=显示人体骨架, false=只显示点)
-
-# Visualization settings
 visualization:
-  box_thickness: 2                              # 框线粗细 (像素值, 建议2-3)
-  font_scale: 0.5                               # 字体大小 (0.5=适中, 大图可调大)
-  show_labels: true                             # 显示类别标签 (true=显示"person")
-  show_conf: true                               # 显示置信度 (true=显示"0.95")
-  line_width: null                              # 框线宽度 (null=自动计算)
+  box_thickness: 2  # 边框线宽 (前端可视化, 默认 2)
+  font_scale: 0.5  # 标签字体比例 (前端可视化, 默认 0.5)
+  show_labels: true  # 显示类别标签 (前端可视化)
+  show_conf: true  # 显示置信度分数 (前端可视化)
+  kpt_radius: 5  # 关键点圆点半径 (pose 任务专用, 默认 5)
+  kpt_line: true  # 绘制关键点骨架连线 (pose 任务专用)
+  skeleton:
+    - [16, 14]
+    - [14, 12]
+    - [17, 15]
+    - [15, 13]
+    - [12, 13]
+    - [6, 12]
+    - [7, 13]
+    - [6, 7]
+    - [6, 8]
+    - [7, 9]
+    - [8, 10]
+    - [9, 11]
+  kpt_names:
+    0:
+      - nose
+      - left_eye
+      - right_eye
+      - left_ear
+      - right_ear
+      - left_shoulder
+      - right_shoulder
+      - left_elbow
+      - right_elbow
+      - left_wrist
+      - right_wrist
+      - left_hip
+      - right_hip
+      - left_knee
+      - right_knee
+      - left_ankle
+      - right_ankle
 
-# Video settings
 video:
-  fps: null                                     # 输出视频FPS (null=保持原FPS, 可强制指定)
-  codec: "mp4v"                                 # 视频编码器 (mp4v=兼容性好, xvid/h264=质量高)
-  stream_buffer: false                          # 流缓冲 (false=保留最新帧, true=缓冲全部帧)
+  codec: mp4v  # 视频编码器 fourcc 码 (默认 mp4v)
 
-# Other settings
-verbose: true                                   # 详细输出 (true=显示处理进度信息)
+verbose: true  # 详细日志输出

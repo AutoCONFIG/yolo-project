@@ -16,7 +16,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Default config file
-DEFAULT_CONFIG="${SCRIPT_DIR}/configs/export/onnx.yaml"
+DEFAULT_CONFIG="${SCRIPT_DIR}/configs/export/example/onnx/detect_example.yaml"
 
 # Parse arguments
 CONFIG_FILE=""

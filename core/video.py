@@ -13,17 +13,6 @@ from core.visualization import draw_detections
 from utils.constants import IMG_EXTENSIONS, VIDEO_EXTENSIONS
 
 
-# ─── Simple namespace helper ────────────────────────────────────────────────
-
-
-class _VisArgs:
-    """可视化参数的简易容器。"""
-
-    def __init__(self, **kwargs):
-        for k, v in kwargs.items():
-            setattr(self, k, v)
-
-
 # ─── File utilities ─────────────────────────────────────────────────────────
 
 
@@ -75,9 +64,9 @@ def inference_video(
     save_json: bool = False,
     verbose: bool = False,
     vis_cfg: Optional[Dict[str, Any]] = None,
-    args: Optional[_VisArgs] = None,
     skeleton: Optional[List[Tuple[int, int]]] = None,
     kpt_names: Optional[Dict[int, List[str]]] = None,
+    vid_stride: int = 1,
 ) -> List[ImageResult]:
     """对视频文件运行推理，保存标注结果。"""
     cap = cv2.VideoCapture(str(input_path))
@@ -88,7 +77,7 @@ def inference_video(
     src_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     src_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    out_fps = fps if fps is not None else src_fps
+    out_fps = (fps if fps is not None else src_fps) / vid_stride
 
     writer = None
     video_out_path = None
@@ -116,6 +105,10 @@ def inference_video(
             if not ret:
                 break
 
+            if frame_idx % vid_stride != 0:
+                frame_idx += 1
+                continue
+
             result = engine(frame)
             result.image_path = f"{input_path.name}#frame{frame_idx}"
             all_results.append(result)
@@ -125,18 +118,14 @@ def inference_video(
                     frame,
                     result,
                     engine.classes,
-                    box_thickness=vis_cfg.get("box_thickness", args.box_thickness)
-                    if vis_cfg
-                    else args.box_thickness,
-                    font_scale=vis_cfg.get("font_scale", args.font_scale)
-                    if vis_cfg
-                    else args.font_scale,
-                    show_labels=vis_cfg.get("show_labels", args.show_labels)
-                    if vis_cfg
-                    else args.show_labels,
-                    show_conf=vis_cfg.get("show_conf", args.show_conf)
-                    if vis_cfg
-                    else args.show_conf,
+                    box_thickness=vis_cfg.get("box_thickness", 2) if vis_cfg else 2,
+                    font_scale=vis_cfg.get("font_scale", 0.5) if vis_cfg else 0.5,
+                    show_labels=vis_cfg.get("show_labels", True) if vis_cfg else True,
+                    show_conf=vis_cfg.get("show_conf", True) if vis_cfg else True,
+                    line_width=vis_cfg.get("line_width") if vis_cfg else None,
+                    mask_alpha=vis_cfg.get("mask_alpha", 0.4) if vis_cfg else 0.4,
+                    kpt_radius=vis_cfg.get("kpt_radius", 5) if vis_cfg else 5,
+                    kpt_line=vis_cfg.get("kpt_line", True) if vis_cfg else True,
                     skeleton=skeleton,
                     kpt_names=kpt_names,
                 )
@@ -154,8 +143,9 @@ def inference_video(
         if writer is not None and writer.isOpened():
             writer.release()
 
-    if save_json and video_out_path:
+    if save_json:
         json_path = output_path / f"{input_path.stem}_results.json"
+        json_path.parent.mkdir(parents=True, exist_ok=True)
         json_data = {
             "video": str(input_path),
             "fps": out_fps,

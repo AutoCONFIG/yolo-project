@@ -14,8 +14,6 @@ import numpy as np
 # ═══════════════════════════════════════════════════════════════════════════════
 
 DEFAULT_PREDICT_OUTPUT: Final[str] = "runs/predict"
-DEFAULT_TRAIN_OUTPUT: Final[str] = "runs/train"
-DEFAULT_VAL_OUTPUT: Final[str] = "runs/val"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  NMS / inference defaults

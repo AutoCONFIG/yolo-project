@@ -70,7 +70,7 @@ Examples:
         "--pretrained",
         type=str,
         default=None,
-        help="预训练权重路径 (字符串); YAML 中可用 True/False",
+        help="预训练权重路径 (如 yolo26n.pt); 布尔控制请用 --pretrained-bool",
     )
     parser.add_argument(
         "--pretrained-bool",
@@ -109,34 +109,10 @@ Examples:
         choices=["ram", "disk"],
         help="缓存图像到内存或磁盘以加速训练",
     )
-    parser.add_argument(
-        "--save",
-        type=str,
-        default=None,
-        choices=["true", "false"],
-        help="是否保存检查点 (布尔字符串)",
-    )
-    parser.add_argument(
-        "--amp",
-        type=str,
-        default=None,
-        choices=["true", "false"],
-        help="自动混合精度训练 (布尔字符串)",
-    )
-    parser.add_argument(
-        "--rect",
-        type=str,
-        default=None,
-        choices=["true", "false"],
-        help="矩形批量训练 (布尔字符串)",
-    )
-    parser.add_argument(
-        "--single-cls",
-        type=str,
-        default=None,
-        choices=["true", "false"],
-        help="将所有类别视为一个 (布尔字符串)",
-    )
+    set_boolean_argument(parser, "save", "save", help_true="保存训练检查点", help_false="不保存检查点")
+    set_boolean_argument(parser, "amp", "amp", help_true="自动混合精度训练", help_false="禁用 AMP")
+    set_boolean_argument(parser, "rect", "rect", help_true="矩形批量训练", help_false="正常方形训练")
+    set_boolean_argument(parser, "single_cls", "single-cls", help_true="单类别模式", help_false="多类别模式")
     parser.add_argument("--fraction", type=float, default=None, help="使用数据集的比例 (0.0-1.0)")
     parser.add_argument("--freeze", type=int, nargs="+", default=None, help="冻结前 N 层 (整数或列表)")
     parser.add_argument(
@@ -152,21 +128,9 @@ Examples:
         choices=["true", "false", "default", "reduce-overhead", "max-autotune-no-cudagraphs"],
         help="torch.compile 模式",
     )
-    parser.add_argument(
-        "--end2end",
-        type=str,
-        default=None,
-        choices=["true", "false"],
-        help="端到端检测头 (YOLO26/YOLOv10, 布尔字符串)",
-    )
+    set_boolean_argument(parser, "end2end", "end2end", help_true="端到端检测头 (YOLO26/YOLOv10)", help_false="标准检测头")
     parser.add_argument("--nbs", type=int, default=None, help="损失归一化的标称批大小 (默认 64)")
-    parser.add_argument(
-        "--profile",
-        type=str,
-        default=None,
-        choices=["true", "false"],
-        help="性能分析 ONNX/TensorRT 速度 (布尔字符串)",
-    )
+    set_boolean_argument(parser, "profile", "profile", help_true="性能分析 ONNX/TensorRT 速度", help_false="不进行性能分析")
 
     # ── Optimizer ─────────────────────────────────────────────────────
     parser.add_argument("--optimizer", type=str, default=None, help="优化器: SGD/Adam/AdamW/auto (默认 auto)")
@@ -181,13 +145,7 @@ Examples:
     )
     parser.add_argument("--close-mosaic", type=int, default=None, help="最后 N 轮禁用马赛克增强 (默认 10, 0 = 保持)")
     parser.add_argument("--seed", type=int, default=None, help="随机种子 (默认 0)")
-    parser.add_argument(
-        "--deterministic",
-        type=str,
-        default=None,
-        choices=["true", "false"],
-        help="确定性操作以保证可复现性 (布尔字符串)",
-    )
+    set_boolean_argument(parser, "deterministic", "deterministic", help_true="确定性操作以保证可复现性", help_false="非确定性模式")
 
     # ── Warmup ────────────────────────────────────────────────────────
     parser.add_argument("--warmup-epochs", type=float, default=None, help="预热轮数 (默认 3.0)")
@@ -205,13 +163,7 @@ Examples:
     parser.add_argument("--angle", type=float, default=None, help="OBB 角度损失增益 (默认 1.0)")
 
     # ── Task-specific ─────────────────────────────────────────────────
-    parser.add_argument(
-        "--overlap-mask",
-        type=str,
-        default=None,
-        choices=["true", "false"],
-        help="训练时合并实例掩码 (仅 segment, 布尔字符串)",
-    )
+    set_boolean_argument(parser, "overlap_mask", "overlap-mask", help_true="训练时合并实例掩码 (仅 segment)", help_false="不合并实例掩码")
     parser.add_argument("--mask-ratio", type=int, default=None, help="掩码下采样比 (仅 segment, 默认 4)")
     parser.add_argument(
         "--dropout",
@@ -258,7 +210,7 @@ Examples:
     )
 
     # ── Validation during training ────────────────────────────────────
-    parser.add_argument("--val", type=str, default=None, choices=["true", "false"], help="训练期间运行验证 (布尔字符串)")
+    set_boolean_argument(parser, "val", "val", help_true="训练期间运行验证", help_false="训练期间不验证")
     parser.add_argument("--conf", type=float, default=None, help="置信度阈值")
     parser.add_argument("--iou", type=float, default=None, help="NMS IoU 阈值 (默认 0.7)")
     parser.add_argument("--max-det", type=int, default=None, help="每张图最大检测数 (默认 300)")
@@ -303,10 +255,12 @@ def args_to_config(args: argparse.Namespace) -> Dict[str, Any]:
     )
     if args.model:
         model_cfg["name"] = args.model
-    if args.pretrained:
-        model_cfg["pretrained"] = args.pretrained
-    elif args.pretrained_bool is not None:
+    if args.pretrained_bool is not None:
         model_cfg["pretrained"] = to_bool(args.pretrained_bool)
+    elif args.pretrained is not None:
+        # 尝试将 true/false 字符串转为布尔，否则保留为权重路径字符串
+        pretrained_val = to_bool(args.pretrained)
+        model_cfg["pretrained"] = pretrained_val if pretrained_val is not None else args.pretrained
     if model_cfg:
         config["model"] = model_cfg
 
@@ -324,7 +278,7 @@ def args_to_config(args: argparse.Namespace) -> Dict[str, Any]:
         "lr0", "lrf", "momentum", "weight_decay", "close_mosaic", "seed",
         "warmup_epochs", "warmup_momentum", "warmup_bias_lr",
         "box", "cls", "cls_pw", "dfl", "pose", "kobj", "rle", "angle",
-        "mask_ratio", "dropout",
+        "mask_ratio", "dropout", "auto_augment", "erasing",
     )
     train_bool = (
         "save", "amp", "rect", "single_cls", "end2end", "profile",
@@ -431,11 +385,13 @@ def train(config: Dict):
     if task is not None:
         train_args["task"] = task
 
-    for key in ("val", "conf", "iou", "max_det", "half", "plots", "save_json", "dnn"):
+    # Validation 节参数 -> 传给 train (ultralytics model.train 统一接受)
+    # 注意: save_json 是验证参数，不应传给 train
+    for key in ("val", "conf", "iou", "max_det", "half", "plots", "dnn",
+                "agnostic_nms", "augment", "save_conf", "int8"):
         v = get_nested_value(config, "validation", key)
         if v is not None:
             train_args[key] = v
-    train_args["split"] = get_nested_value(config, "data", "split", default="val")
 
     for key in ("project", "name"):
         v = get_nested_value(config, "output", key)
@@ -484,7 +440,7 @@ def train(config: Dict):
         if resume:
             print(f"检查点未找到: {last_pt}, 从零开始训练")
         if model_yaml:
-            model = YOLO(model_yaml)
+            model = YOLO(model_yaml, task=task) if task else YOLO(model_yaml)
             if isinstance(pretrained, str):
                 model.load(pretrained)
         else:
@@ -514,7 +470,7 @@ def main():
             config = load_yaml_config(args.config)
 
         cli_config = args_to_config(args)
-        config = merge_configs(config, cli_config)
+        config = merge_configs(config, cli_config)  # YAML in base, CLI in override = CLI wins
 
         train(config)
     except KeyboardInterrupt:

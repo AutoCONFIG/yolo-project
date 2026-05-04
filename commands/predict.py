@@ -32,39 +32,22 @@ from core import (
 )
 from core.types import NMSConfig
 from utils.config import (
+    config_from_args,
     get_nested_value,
     load_yaml_config,
     merge_configs,
+    resolve_config_value,
     set_boolean_argument,
     setup_ultralytics_path,
     to_bool,
 )
+from utils.constants import (
+    DEFAULT_IOU_THRESHOLD,
+    DEFAULT_MAX_DETECTIONS,
+    DEFAULT_PREDICT_OUTPUT,
+)
 
 setup_ultralytics_path()
-
-
-# ─── CLI parameter defaults that differ from constructor defaults ───────────
-
-_PREDICT_DEFAULTS = {
-    "kpt_thres": 0.5,
-    "topk": 5,
-    "vid_stride": 1,
-    "embed": None,
-    "line_width": None,
-}
-
-
-def _resolve_config_value(config: Dict, *chain, default=None):
-    """按优先级链查找配置值，返回第一个非 None 的结果。
-
-    chain 中每个元素为 (section, key) 元组，按传入顺序依次查找。
-    若全部未命中则返回 default。
-    """
-    for section, key in chain:
-        v = get_nested_value(config, section, key)
-        if v is not None:
-            return v
-    return default
 
 
 def _save_result(
@@ -87,7 +70,7 @@ def _save_result(
     Returns:
         检测到的任务类型字符串。
     """
-    rel_path = image_file.name if input_path.is_file() else image_file.relative_to(input_path)
+    rel_path = Path(image_file.name) if input_path.is_file() else image_file.relative_to(input_path)
 
     if save_vis:
         vis_output = draw_detections(
@@ -193,46 +176,49 @@ Examples:
         "--format", "-f", type=str, choices=["auto", "pytorch", "onnx"], default="auto",
         help="模型格式",
     )
-    parser.add_argument("--imgsz", type=int, default=640, help="输入图像尺寸")
-    parser.add_argument("--device", type=str, default="auto", help="设备: auto, cpu, cuda, 0")
-    parser.add_argument("--batch", type=int, default=1, help="推理批大小")
+    parser.add_argument("--imgsz", type=int, default=None, help="输入图像尺寸")
+    parser.add_argument("--device", type=str, default=None, help="设备: auto, cpu, cuda, 0")
+    parser.add_argument("--batch", type=int, default=None, help="推理批大小")
 
     set_boolean_argument(parser, "stream", "stream", help_true="流式推理", help_false="非流式")
     set_boolean_argument(parser, "half", "half", help_true="FP16 半精度", help_false="全精度")
     set_boolean_argument(parser, "augment", "augment", help_true="TTA 增强", help_false="无 TTA")
-    parser.add_argument("--vid-stride", type=int, default=1, help="视频帧步长")
+    parser.add_argument("--vid-stride", type=int, default=None, help="视频帧步长")
     set_boolean_argument(parser, "retina_masks", "retina-masks", help_true="高分辨率掩码", help_false="标准掩码")
     set_boolean_argument(parser, "visualize", "visualize", help_true="可视化特征", help_false="不可视化")
     parser.add_argument("--embed", type=int, nargs="+", default=None, help="特征嵌入层索引")
     set_boolean_argument(parser, "int8", "int8", help_true="INT8 量化", help_false="无 INT8")
-    parser.add_argument("--kpt-thres", type=float, default=0.5, help="关键点阈值")
-    parser.add_argument("--topk", type=int, default=5, help="分类 Top-K")
+    set_boolean_argument(parser, "dnn", "dnn", help_true="OpenCV DNN ONNX 推理", help_false="不使用 DNN")
+    set_boolean_argument(parser, "end2end", "end2end", help_true="端到端检测头 (YOLO26/YOLOv10)", help_false="标准检测头")
+    parser.add_argument("--kpt-thres", type=float, default=None, help="关键点阈值 (仅姿态估计)")
+    parser.add_argument("--topk", type=int, default=None, help="分类 Top-K (仅分类任务)")
+    set_boolean_argument(parser, "save_conf", "save-conf", help_true="保存置信度到结果", help_false="不保存置信度")
+    set_boolean_argument(parser, "stream_buffer", "stream-buffer", help_true="流式缓冲所有帧", help_false="只保留最新帧")
 
     parser.add_argument("--input", "-i", type=str, default=None, help="输入图像或目录")
-    parser.add_argument("--output", "-o", type=str, default="runs/predict", help="输出目录")
+    parser.add_argument("--output", "-o", type=str, default=None, help="输出目录")
     set_boolean_argument(parser, "save_vis", "save-vis", help_true="保存可视化", help_false="不保存可视化", neg_prefix="no-")
-    parser.add_argument("--save-json", action="store_true", help="保存 JSON 结果")
-    parser.add_argument("--save-txt", action="store_true", help="保存 YOLO txt 标签")
-    parser.add_argument("--save-crop", action="store_true", help="保存裁剪目标")
+    set_boolean_argument(parser, "save_json", "save-json", help_true="保存 JSON 结果", help_false="不保存 JSON")
+    set_boolean_argument(parser, "save_txt", "save-txt", help_true="保存 YOLO txt 标签", help_false="不保存 txt")
+    set_boolean_argument(parser, "save_crop", "save-crop", help_true="保存裁剪目标", help_false="不保存裁剪")
 
-    parser.add_argument("--conf", type=float, default=0.25, help="置信度阈值")
-    parser.add_argument("--iou", type=float, default=0.7, help="NMS IoU 阈值")
-    parser.add_argument("--max-det", type=int, default=300, help="最大检测数")
+    parser.add_argument("--conf", type=float, default=None, help="置信度阈值")
+    parser.add_argument("--iou", type=float, default=None, help="NMS IoU 阈值")
+    parser.add_argument("--max-det", type=int, default=None, help="最大检测数")
     set_boolean_argument(parser, "agnostic_nms", "agnostic-nms", help_true="类别无关 NMS", help_false="类别特定 NMS")
-    parser.add_argument("--classes", type=int, nargs="+", help="类别过滤")
+    parser.add_argument("--classes", type=int, nargs="+", default=None, help="类别过滤")
 
-    parser.add_argument("--box-thickness", type=int, default=2, help="边框线宽")
-    parser.add_argument("--font-scale", type=float, default=0.5, help="字体比例")
+    parser.add_argument("--box-thickness", type=int, default=None, help="边框线宽")
+    parser.add_argument("--font-scale", type=float, default=None, help="字体比例")
     set_boolean_argument(parser, "show_labels", "show-labels", help_true="显示标签", help_false="不显示标签", neg_prefix="no-")
     set_boolean_argument(parser, "show_conf", "show-conf", help_true="显示置信度", help_false="不显示置信度", neg_prefix="no-")
 
     parser.add_argument("--fps", type=float, default=None, help="输出视频 FPS")
-    parser.add_argument("--codec", type=str, default="mp4v", help="视频编码器")
+    parser.add_argument("--codec", type=str, default=None, help="视频编码器")
 
-    parser.add_argument("--line-width", type=int, default=None, help="边框线宽(自动)")
+    parser.add_argument("--line-width", type=int, default=None, help="后端渲染边框线宽 (自动缩放)")
     set_boolean_argument(parser, "save_frames", "save-frames", help_true="保存视频帧", help_false="不保存帧", neg_prefix="no-")
-    set_boolean_argument(parser, "stream_buffer", "stream-buffer", help_true="缓冲流帧", help_false="不缓冲", neg_prefix="no-")
-    set_boolean_argument(parser, "save_conf", "save-conf", help_true="保存置信度", help_false="不保存置信度", neg_prefix="no-")
+    set_boolean_argument(parser, "show", "show", help_true="弹出窗口显示结果", help_false="不弹出窗口")
     set_boolean_argument(parser, "verbose", "verbose", help_true="详细输出", help_false="简洁输出", neg_prefix="no-")
 
     return parser.parse_args()
@@ -246,28 +232,18 @@ def args_to_config(args: argparse.Namespace) -> Dict[str, Any]:
     model_cfg = config_from_args(
         args,
         plain=("model", "format", "imgsz", "device", "batch", "classes",
-               "vid_stride", "embed", "line_width", "kpt_thres", "topk"),
+               "vid_stride", "embed", "line_width", "topk", "kpt_thres"),
         boolean=("stream", "half", "augment", "retina_masks", "visualize",
-                 "int8", "save_frames", "stream_buffer", "save_conf"),
+                 "int8", "save_frames", "stream_buffer", "save_conf", "dnn", "end2end", "show"),
         rename={"model": "path"},
     )
-    # 排除与默认值相同的参数，保持配置精简
-    for field, default in _PREDICT_DEFAULTS.items():
-        if field in model_cfg and model_cfg[field] == default:
-            del model_cfg[field]
     if model_cfg:
         config["model"] = model_cfg
 
     # IO
     io_cfg = config_from_args(
-        args, plain=("input", "output"), boolean=("save_vis",)
+        args, plain=("input", "output"), boolean=("save_vis", "save_json", "save_txt", "save_crop")
     )
-    for field in ("save_json", "save_txt", "save_crop"):
-        v = getattr(args, field, None)
-        if v:
-            io_cfg[field] = v
-    if args.output == "runs/predict" and "output" in io_cfg:
-        del io_cfg["output"]
     if io_cfg:
         config["io"] = io_cfg
 
@@ -276,15 +252,14 @@ def args_to_config(args: argparse.Namespace) -> Dict[str, Any]:
         args, plain=("conf", "iou", "max_det"), boolean=("agnostic_nms",)
     )
     if nms_cfg:
-        config["nms"] = {"agnostic": nms_cfg.pop("agnostic_nms")} if "agnostic_nms" in nms_cfg else {}
-        config["nms"].update(nms_cfg)
+        config["nms"] = {**config.get("nms", {}), **nms_cfg}
 
     # Visualization
     vis_cfg = config_from_args(
         args, plain=("box_thickness", "font_scale"), boolean=("show_labels", "show_conf")
     )
     if vis_cfg:
-        config["visualization"] = vis_cfg
+        config["visualization"] = {**config.get("visualization", {}), **vis_cfg}
 
     # Video
     video_cfg = config_from_args(args, plain=("fps", "codec"))
@@ -314,17 +289,20 @@ def predict(config: Dict) -> None:
     half = get_nested_value(config, "model", "half", default=False)
     augment = get_nested_value(config, "model", "augment", default=False)
     vid_stride = get_nested_value(config, "model", "vid_stride", default=1)
-    retina_masks = _resolve_config_value(config, ("model", "retina_masks"), ("segmentation", "retina_masks"), default=False)
+    retina_masks = get_nested_value(config, "model", "retina_masks", default=False)
     visualize = get_nested_value(config, "model", "visualize", default=False)
     embed = get_nested_value(config, "model", "embed")
     int8 = get_nested_value(config, "model", "int8", default=False)
     line_width = get_nested_value(config, "model", "line_width")
-    save_frames = _resolve_config_value(config, ("model", "save_frames"), ("io", "save_frames"), default=False)
-    stream_buffer = _resolve_config_value(config, ("model", "stream_buffer"), ("video", "stream_buffer"), default=False)
+    save_frames = get_nested_value(config, "model", "save_frames", default=False)
+    stream_buffer = get_nested_value(config, "model", "stream_buffer", default=False)
     save_conf = get_nested_value(config, "model", "save_conf", default=False)
+    dnn = get_nested_value(config, "model", "dnn", default=False)
+    end2end = resolve_config_value(config, ("model", "end2end"), ("nms", "end2end"), default=None)
+    show = get_nested_value(config, "model", "show", default=False)
 
     input_path = get_nested_value(config, "io", "input")
-    output_path = get_nested_value(config, "io", "output", default="runs/predict")
+    output_path = get_nested_value(config, "io", "output", default=DEFAULT_PREDICT_OUTPUT)
     save_vis = get_nested_value(config, "io", "save_vis", default=True)
     save_json = get_nested_value(config, "io", "save_json", default=False)
     save_txt = get_nested_value(config, "io", "save_txt", default=False)
@@ -340,11 +318,11 @@ def predict(config: Dict) -> None:
 
     nms_config = NMSConfig(
         conf_threshold=get_nested_value(config, "nms", "conf", default=0.25),
-        iou_threshold=get_nested_value(config, "nms", "iou", default=0.7),
-        max_detections=get_nested_value(config, "nms", "max_det", default=300),
-        agnostic=get_nested_value(config, "nms", "agnostic", default=False),
-        kpt_thres=_resolve_config_value(config, ("model", "kpt_thres"), ("nms", "kpt_thres"), ("pose", "kpt_thres"), default=0.5),
-        topk=_resolve_config_value(config, ("model", "topk"), ("nms", "topk"), ("classification", "topk"), default=5),
+        iou_threshold=get_nested_value(config, "nms", "iou", default=DEFAULT_IOU_THRESHOLD),
+        max_detections=get_nested_value(config, "nms", "max_det", default=DEFAULT_MAX_DETECTIONS),
+        agnostic=get_nested_value(config, "nms", "agnostic_nms", default=False),
+        kpt_thres=resolve_config_value(config, ("model", "kpt_thres"), ("nms", "kpt_thres"), default=0.5),
+        topk=resolve_config_value(config, ("model", "topk"), ("nms", "topk"), default=5),
     )
 
     skeleton_cfg = get_nested_value(config, "visualization", "skeleton")
@@ -380,6 +358,9 @@ def predict(config: Dict) -> None:
         save_frames=save_frames,
         stream_buffer=stream_buffer,
         save_conf=save_conf,
+        dnn=dnn,
+        end2end=end2end,
+        show=show,
     )
 
     input_path_obj = Path(input_path)
@@ -389,17 +370,6 @@ def predict(config: Dict) -> None:
     if input_path_obj.is_file() and is_video_file(input_path_obj):
         video_cfg = config.get("video", {})
         vis_cfg = config.get("visualization", {})
-        from core.video import _VisArgs
-        vis_args = _VisArgs(
-            box_thickness=vis_cfg.get("box_thickness", 2),
-            font_scale=vis_cfg.get("font_scale", 0.5),
-            show_labels=vis_cfg.get("show_labels", True),
-            show_conf=vis_cfg.get("show_conf", True),
-            line_width=vis_cfg.get("line_width"),
-            mask_alpha=vis_cfg.get("mask_alpha", 0.4),
-            kpt_radius=vis_cfg.get("kpt_radius", 5),
-            kpt_line=vis_cfg.get("kpt_line", True),
-        )
         inference_video(
             engine=engine,
             input_path=input_path_obj,
@@ -410,9 +380,9 @@ def predict(config: Dict) -> None:
             save_json=save_json,
             verbose=verbose,
             vis_cfg=vis_cfg,
-            args=vis_args,
             skeleton=skeleton,
             kpt_names=kpt_names,
+            vid_stride=vid_stride,
         )
         return
 
@@ -428,19 +398,8 @@ def predict(config: Dict) -> None:
     # 处理视频
     if video_files:
         vis_cfg = config.get("visualization", {})
-        from core.video import _VisArgs
-        vis_args = _VisArgs(
-            box_thickness=vis_cfg.get("box_thickness", 2),
-            font_scale=vis_cfg.get("font_scale", 0.5),
-            show_labels=vis_cfg.get("show_labels", True),
-            show_conf=vis_cfg.get("show_conf", True),
-            line_width=vis_cfg.get("line_width"),
-            mask_alpha=vis_cfg.get("mask_alpha", 0.4),
-            kpt_radius=vis_cfg.get("kpt_radius", 5),
-            kpt_line=vis_cfg.get("kpt_line", True),
-        )
+        video_cfg = config.get("video", {})
         for vf in video_files:
-            video_cfg = config.get("video", {})
             if verbose:
                 print(f"\n处理视频: {vf}")
             inference_video(
@@ -453,9 +412,9 @@ def predict(config: Dict) -> None:
                 save_json=save_json,
                 verbose=verbose,
                 vis_cfg=vis_cfg,
-                args=vis_args,
                 skeleton=skeleton,
                 kpt_names=kpt_names,
+                vid_stride=vid_stride,
             )
 
     # 处理图像
@@ -495,7 +454,7 @@ def predict(config: Dict) -> None:
 
         batch_results = engine.inference_batch(batch_images)
 
-        for result, image_file, image in zip(batch_results, valid_files, batch_images):
+        for local_idx, (result, image_file, image) in enumerate(zip(batch_results, valid_files, batch_images)):
             result.image_path = str(image_file)
             all_results.append(result)
             total_detections += len(result.detections)
@@ -503,21 +462,24 @@ def predict(config: Dict) -> None:
 
             if verbose:
                 task_info = f"[{result.task_type}]" if result.task_type != "detect" else ""
-                print(f"[{start_idx + len(valid_files)}/{len(image_files)}] {image_file.name}: {len(result.detections)} 检测 {task_info}, {result.inference_time*1000:.2f}ms")
+                print(f"[{start_idx + local_idx + 1}/{len(image_files)}] {image_file.name}: {len(result.detections)} 检测 {task_info}, {result.inference_time*1000:.2f}ms")
 
+            _save_result(
+                result, image_file, image,
+                output_path=output_path_obj,
+                input_path=input_path_obj,
+                classes=engine.classes,
+                vis_cfg=vis_cfg,
+                save_vis=save_vis,
+                save_crop=save_crop,
+                save_txt=save_txt,
+                skeleton=skeleton,
+                kpt_names=kpt_names,
+            )
+            
+            # Track task type from first result
             if detected_task_type is None:
-                detected_task_type = _save_result(
-                    result, image_file, image,
-                    output_path=output_path_obj,
-                    input_path=input_path_obj,
-                    classes=engine.classes,
-                    vis_cfg=vis_cfg,
-                    save_vis=save_vis,
-                    save_crop=save_crop,
-                    save_txt=save_txt,
-                    skeleton=skeleton,
-                    kpt_names=kpt_names,
-                )
+                detected_task_type = result.task_type
 
     if save_json:
         json_path = output_path_obj / "results.json"
@@ -558,7 +520,8 @@ def main():
         if args.config:
             config = load_yaml_config(args.config)
         cli_config = args_to_config(args)
-        config = merge_configs(config, cli_config)
+        # CLI overrides YAML for explicitly-specified args
+        config = merge_configs(config, cli_config)  # YAML in base, CLI in override = CLI wins
         predict(config)
     except KeyboardInterrupt:
         print("\n推理被用户中断。")
