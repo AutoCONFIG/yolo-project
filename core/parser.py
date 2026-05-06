@@ -8,6 +8,16 @@ from typing import Dict, Tuple
 from core.types import DetectionResult, ImageResult
 
 
+def _parse_box(box, classes: Dict[int, str]):
+    """从 ultralytics box 对象提取 bbox/conf/class_id/class_name。"""
+    x1, y1, x2, y2 = box.xyxy.squeeze().cpu().numpy().tolist()
+    conf = box.conf.cpu().numpy()
+    conf = float(conf.item() if conf.ndim == 0 else conf.squeeze())
+    class_id = int(box.cls.cpu().numpy().squeeze())
+    class_name = classes.get(class_id, f"class_{class_id}")
+    return [x1, y1, x2, y2], conf, class_id, class_name
+
+
 def parse_pytorch_result(result, classes: Dict[int, str], image_shape: Tuple[int, int]) -> ImageResult:
     """将 ultralytics Results 对象解析为 ImageResult。
 
@@ -19,7 +29,6 @@ def parse_pytorch_result(result, classes: Dict[int, str], image_shape: Tuple[int
     obb_boxes = None
     task_type = "detect"
 
-    # 分类任务
     if result.probs is not None:
         task_type = "classify"
         probs = []
@@ -28,7 +37,6 @@ def parse_pytorch_result(result, classes: Dict[int, str], image_shape: Tuple[int
             prob = float(result.probs.data[idx])
             probs.append((class_name, prob))
 
-    # OBB 任务
     elif result.obb is not None:
         task_type = "obb"
         obb_boxes = []
@@ -58,16 +66,10 @@ def parse_pytorch_result(result, classes: Dict[int, str], image_shape: Tuple[int
                 "class_name": class_name,
             })
 
-    # 分割任务
     elif result.masks is not None:
         task_type = "segment"
         for i in range(len(result.boxes)):
-            box = result.boxes[i]
-            x1, y1, x2, y2 = box.xyxy.squeeze().cpu().numpy().tolist()
-            conf = box.conf.cpu().numpy()
-            conf = float(conf.item() if conf.ndim == 0 else conf.squeeze())
-            class_id = int(box.cls.cpu().numpy().squeeze())
-            class_name = classes.get(class_id, f"class_{class_id}")
+            bbox, conf, class_id, class_name = _parse_box(result.boxes[i], classes)
 
             mask = None
             if i < len(result.masks):
@@ -81,7 +83,7 @@ def parse_pytorch_result(result, classes: Dict[int, str], image_shape: Tuple[int
 
             detections.append(
                 DetectionResult(
-                    bbox=[x1, y1, x2, y2],
+                    bbox=bbox,
                     confidence=conf,
                     class_id=class_id,
                     class_name=class_name,
@@ -89,16 +91,10 @@ def parse_pytorch_result(result, classes: Dict[int, str], image_shape: Tuple[int
                 )
             )
 
-    # 姿态估计任务
     elif result.keypoints is not None:
         task_type = "pose"
         for i in range(len(result.boxes)):
-            box = result.boxes[i]
-            x1, y1, x2, y2 = box.xyxy.squeeze().cpu().numpy().tolist()
-            conf = box.conf.cpu().numpy()
-            conf = float(conf.item() if conf.ndim == 0 else conf.squeeze())
-            class_id = int(box.cls.cpu().numpy().squeeze())
-            class_name = classes.get(class_id, f"class_{class_id}")
+            bbox, conf, class_id, class_name = _parse_box(result.boxes[i], classes)
 
             keypoints = None
             if i < len(result.keypoints):
@@ -107,7 +103,7 @@ def parse_pytorch_result(result, classes: Dict[int, str], image_shape: Tuple[int
 
             detections.append(
                 DetectionResult(
-                    bbox=[x1, y1, x2, y2],
+                    bbox=bbox,
                     confidence=conf,
                     class_id=class_id,
                     class_name=class_name,
@@ -115,19 +111,13 @@ def parse_pytorch_result(result, classes: Dict[int, str], image_shape: Tuple[int
                 )
             )
 
-    # 检测任务
     elif result.boxes is not None:
         for i in range(len(result.boxes)):
-            box = result.boxes[i]
-            x1, y1, x2, y2 = box.xyxy.squeeze().cpu().numpy().tolist()
-            conf = box.conf.cpu().numpy()
-            conf = float(conf.item() if conf.ndim == 0 else conf.squeeze())
-            class_id = int(box.cls.cpu().numpy().squeeze())
-            class_name = classes.get(class_id, f"class_{class_id}")
+            bbox, conf, class_id, class_name = _parse_box(result.boxes[i], classes)
 
             detections.append(
                 DetectionResult(
-                    bbox=[x1, y1, x2, y2],
+                    bbox=bbox,
                     confidence=conf,
                     class_id=class_id,
                     class_name=class_name,

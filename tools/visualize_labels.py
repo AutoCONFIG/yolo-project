@@ -21,6 +21,8 @@ Usage:
   python visualize_labels.py --labels path/to/labels --images path/to/images --kpt-shape 4 3
 """
 
+from __future__ import annotations
+
 import argparse
 import sys
 from pathlib import Path
@@ -31,13 +33,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import cv2
 import numpy as np
 
-from utils.constants import IMG_EXTENSIONS, DEFAULT_KPT_SHAPE, DEFAULT_SKELETON, DEFAULT_KPT_COLORS
+from utils.constants import IMG_EXTENSIONS, DEFAULT_KPT_SHAPE, DEFAULT_SKELETON, DEFAULT_KPT_COLORS, DEFAULT_KPT_NAMES
+from utils.io import read_text_robust
 from core.visualization import draw_dashed_line
 
 
 # ========== 默认参数 ==========
 DEFAULT_BOX_COLOR = (0, 255, 0)  # BGR: 绿色
-KPT_NAMES = ["front_left", "front_right", "rear_right", "rear_left"]
 # ================================
 
 
@@ -48,36 +50,36 @@ def parse_label_file(label_path: Path, kpt_shape: tuple[int, int]):
     expected_cols = bbox_end + nkpt * ndim
 
     annotations = []
-    with open(label_path, "r", encoding="utf-8") as f:
-        for line_no, line in enumerate(f, 1):
-            parts = line.strip().split()
-            if not parts:
-                continue
+    text = read_text_robust(label_path)
+    for line_no, line in enumerate(text.splitlines(), 1):
+        parts = line.strip().split()
+        if not parts:
+            continue
 
-            if len(parts) < expected_cols:
-                print(f"  [警告] {label_path.name} 第{line_no}行: 列数{len(parts)} < 期望{expected_cols}")
-                continue
+        if len(parts) < expected_cols:
+            print(f"  [警告] {label_path.name} 第{line_no}行: 列数{len(parts)} < 期望{expected_cols}")
+            continue
 
-            try:
-                cls_id = int(parts[0])
-                cx, cy, w, h = float(parts[1]), float(parts[2]), float(parts[3]), float(parts[4])
+        try:
+            cls_id = int(parts[0])
+            cx, cy, w, h = float(parts[1]), float(parts[2]), float(parts[3]), float(parts[4])
 
-                keypoints = []
-                for i in range(nkpt):
-                    base = bbox_end + i * ndim
-                    x = float(parts[base])
-                    y = float(parts[base + 1])
-                    v = float(parts[base + 2]) if ndim == 3 else 1.0
-                    keypoints.append((x, y, v))
+            keypoints = []
+            for i in range(nkpt):
+                base = bbox_end + i * ndim
+                x = float(parts[base])
+                y = float(parts[base + 1])
+                v = float(parts[base + 2]) if ndim == 3 else 1.0
+                keypoints.append((x, y, v))
 
-                annotations.append({
-                    "cls_id": cls_id,
-                    "bbox": (cx, cy, w, h),
-                    "keypoints": keypoints,
-                })
-            except (ValueError, IndexError) as e:
-                print(f"  [警告] {label_path.name} 第{line_no}行: 解析失败 ({e})")
-                continue
+            annotations.append({
+                "cls_id": cls_id,
+                "bbox": (cx, cy, w, h),
+                "keypoints": keypoints,
+            })
+        except (ValueError, IndexError) as e:
+            print(f"  [警告] {label_path.name} 第{line_no}行: 解析失败 ({e})")
+            continue
 
     return annotations
 
@@ -95,6 +97,7 @@ def draw_annotations(
     font_scale: float = 0.5,
     show_labels: bool = True,
     show_conf: bool = False,
+    kpt_names: list[str] | None = None,
 ):
     """在图片上绘制边界框、关键点和骨架。"""
     h_img, w_img = img.shape[:2]
@@ -159,9 +162,10 @@ def draw_annotations(
                 cv2.circle(img, (px, py), kpt_radius, color, -1)
 
             # 关键点名称 + 可见性标注
-            if idx < len(KPT_NAMES):
+            names = kpt_names if kpt_names is not None else DEFAULT_KPT_NAMES
+            if idx < len(names):
                 v_tag = {0: "v0", 1: "v1", 2: "v2"}.get(int(v), f"v{int(v)}")
-                cv2.putText(img, f"{KPT_NAMES[idx]}({v_tag})", (px + kpt_radius + 2, py + 4),
+                cv2.putText(img, f"{names[idx]}({v_tag})", (px + kpt_radius + 2, py + 4),
                             cv2.FONT_HERSHEY_SIMPLEX, font_scale * 0.8, color, 1)
 
     return img
@@ -220,6 +224,7 @@ def browse_images(entries: list[tuple[Path, Path]], args):
             skeleton_thickness=args.skeleton_thickness,
             font_scale=args.font_scale,
             show_labels=args.show_labels,
+            kpt_names=args.kpt_names_list,
         )
 
         # 添加信息栏
@@ -257,6 +262,7 @@ def batch_save(entries: list[tuple[Path, Path]], args):
             skeleton_thickness=args.skeleton_thickness,
             font_scale=args.font_scale,
             show_labels=args.show_labels,
+            kpt_names=args.kpt_names_list,
         )
 
         out_path = save_dir / f"{img_path.stem}.jpg"
@@ -307,17 +313,20 @@ def main():
                         help="骨架线宽 (默认: 2)")
     parser.add_argument("--font-scale", type=float, default=0.5,
                         help="字体大小 (默认: 0.5)")
-    parser.add_argument("--show-labels", action="store_true", default=True,
+    parser.add_argument("--show-labels", action="store_true", default=True, dest="show_labels",
                         help="显示类别标签 (默认开启)")
     parser.add_argument("--no-labels", action="store_false", dest="show_labels",
                         help="不显示类别标签")
     parser.add_argument("--filter-empty", action="store_true", default=False,
                         help="跳过没有标注的图片")
+    parser.add_argument("--kpt-names", type=str, nargs="+", default=None,
+                        help=f"关键点名称列表 (默认: {' '.join(DEFAULT_KPT_NAMES)})")
 
     args = parser.parse_args()
     args.kpt_shape = tuple(args.kpt_shape)
     args.kpt_colors = DEFAULT_KPT_COLORS
     args.skeleton = DEFAULT_SKELETON
+    args.kpt_names_list = args.kpt_names if args.kpt_names is not None else DEFAULT_KPT_NAMES
 
     if not args.labels:
         parser.error("--labels 是必需的，请指定标签目录或文件")

@@ -1,86 +1,114 @@
 # YOLO Detection Training Configuration - Chaoyuan
 # =================================================
-# 车辆/行人/车窗检测任务 - YOLO26n 从头训练
+# 超远场景车辆/行人/车窗检测 - YOLO26s-P2 从头训练
 # 硬件: 16G 显存, 单 HDD
+#
+# 数据集统计 (3483 train / 870 val, 1608x1104 灰度图):
+#   car:        3821 (23.8%) — 大目标, median 735x289px, AR=2.52, 易检测
+#   person:    4820 (30.0%) — 小目标核心挑战, median 43x53px, AR=0.80
+#     ├── 最小 20x19px, 12.6% 宽<32px → imgsz=1280下仅16px
+#     └── P2/4头: 4.0x3.8 cells (vs P3/8的2.0x1.9), 特征分辨率翻倍, confidence可提升
+#   sidewindow: 7421 (46.2%) — 大目标, median 194x85px, AR=2.26, 易检测
+#   类别不平衡: sidewindow 是 car 的 2x, person 的 1.5x (cls_pw=1.0 逆频率加权校正)
+#   场景: 均值~50/255 (暗), 标准差~50 (高对比), 灰度R=G=B
+#
+# person 在 imgsz=1280 (scale=0.796):
+#   median: 34x42px ✓, min: 16x15px ⚠ stride8仅2格
+#   imgsz=1536: min 19px 可更好, 但16G显存batch=2训练慢
+#
+# 调优策略:
+#   imgsz=1280 — 适配小目标 (640下person仅8px无法检测)
+#   保守几何增强 — scale=0.12 保护极小目标不因缩放消失
+#   中高cls损失 — P2特征丰富, 释放capacity给分类, 提升person confidence
+#   适中box/dfl — P2提供更好定位基础, 不需过度强化回归
+#   cls_pw=1.0 — 逆频率加权校正类别不平衡 (car×1.4, person×1.1, sidewindow×0.7)
+#   关闭HSV色调/饱和度 — 灰度图无效通道
+#   SGD优化器 — 不用AdamW (容易不稳定)
 
 model:
-  name: yolo26n.yaml                          # .yaml 从头建网络, .pt 加载预训练权重
-  pretrained: false                           # False=从头训练, True/路径=加载权重
-  task: detect                                # detect/segment/classify/pose/obb
+  name: yolo26s-p2.yaml                       # P2/4 + P3/8 + P4/16 + P5/32 四头检测, 小目标特征翻倍
+  pretrained: false                            # False=从头训练, True/路径=加载权重
+  task: detect                                 # detect/segment/classify/pose/obb
 
 data:
-  config: configs/datasets/chaoyuan.yaml      # 数据集配置文件路径
-  split: val                                  # 验证集划分名称
+  config: configs/datasets/chaoyuan.yaml       # 数据集配置文件路径
+  split: val                                   # 验证集划分名称
 
 train:
-  epochs: 500                                 # 总训练轮数 (早停会提前结束)
-  batch: 52                                   # 每批次图像数 (16G 显存建议 32-64)
-  imgsz: 640                                  # 输入图像尺寸
-  device: null                                # null=自动, "0"=第一块GPU, "0,1"=多卡
-  workers: 4                                  # 数据加载进程 (单 HDD 建议 1-2)
-  resume: true                                # true=从 last.pt 恢复训练
-  patience: 50                                # 早停耐心值
-  cache: disk                                 # ram/disk/False
-  save: true                                  # 是否保存训练权重
-  amp: true                                   # 自动混合精度训练
-  rect: false                                 # 矩形训练
-  single_cls: false                           # 单类别模式
-  fraction: 1.0                               # 使用数据集比例
-  freeze:                                     # 冻结层数 (如 10)
-  multi_scale: 0.3                            # 多尺度训练 (0.3=±30%)
-  compile: false                               # PyTorch 编译优化
-  end2end: true                               # YOLO26 端到端检测
-  nbs: 52                                     # 名义批次大小
+  epochs: 600                                  # 总训练轮数 (早停可能提前结束)
+  time:                                        # 最大训练时长(小时), 设置后覆盖 epochs
+  batch: 4                                     # 批次大小 (P2头显存增加, batch=8可能OOM, batch=4安全)
+  imgsz: 1280                                  # 输入图像尺寸 (person最小20px, 640下仅8px无法检测)
+  device: null                                 # 计算设备: null=自动, cpu, 0, 0,1 等
+  workers: 4                                   # 数据加载进程数 (HDD 建议 1-2, SSD 建议 4-8)
+  resume: false                                # 从 last.pt 恢复训练 (true=自动查找检查点)
+  patience: 60                                 # 早停耐心轮数 (N 轮无提升则停止, 默认 100)
+  cache: disk                                  # 图像缓存: ram/disk/false (缓存可加速但占用资源)
+  save: true                                   # 是否保存训练检查点
+  amp: true                                    # 自动混合精度训练 (FP16, 加速且省显存)
+  rect: false                                  # 矩形批量训练 (减少 padding, 加速但可能略降精度)
+  single_cls: false                            # 单类别模式 (所有类别视为一个)
+  fraction: 1.0                                # 使用数据集比例 (1.0=全部, 0.1=10% 子集)
+  freeze:                                      # 冻结前 N 层 (如 10, 用于迁移学习)
+  multi_scale: 0.1                             # 多尺度训练范围 (0.1→低端1152, person min 14.4px, 1.8格)
+  compile: false                               # torch.compile 优化 (PyTorch 2.0+, 可能加速)
+  end2end: true                                # 端到端检测头 (YOLO26/YOLOv10, 免 NMS)
+  nbs: 32                                      # 名义批次大小 (32→accumulate=11, 每epoch~105次更新, 收敛更快)
+  profile: false                               # 性能分析 ONNX/TensorRT 推理速度
 
-  optimizer: AdamW                             # SGD/Adam/AdamW/auto
-  lr0: 0.001                                  # 初始学习率 (Adam=0.001, SGD=0.01)
-  # 余弦学习率退火
+  optimizer: SGD                               # 优化器: SGD对小目标调参更可控
+  lr0: 0.003                                   # 初始学习率 (SGD, 小目标+低对比度需更低lr防震荡)
+  lrf: 0.01                                    # 最终学习率比例 (余弦退火终点)
+  momentum: 0.937                              # SGD 动量 / Adam beta1 (默认 0.937)
+  weight_decay: 0.0005                         # 权重衰减 L2 正则化 (默认 0.0005)
+  cos_lr: true                                 # 余弦学习率调度 (false=阶梯衰减)
+  warmup_epochs: 5.0                           # 预热轮数 (灰度图+低对比度+小目标, 需更长时间稳定)
+  warmup_momentum: 0.5                         # 预热初始动量 (降低, 从低动量渐进上升更稳定)
+  warmup_bias_lr: 0.1                          # 预热偏置学习率 (默认 0.1)
 
-  warmup_epochs: 3.0                           # 预热轮数
-  warmup_momentum: 0.8                        # 预热动量
-  warmup_bias_lr: 0.1                         # 预热偏置学习率
+  box: 11.0                                    # 边界框损失增益 (P2提升定位基础但仍需高权重, 小目标并排重叠框必须准)
+  cls: 1.5                                     # 分类损失增益 (提高, P2特征丰富后重点提升person confidence)
+  cls_pw: 1.0                                  # 类别权重幂次 (逆频率加权: car×1.4, person×1.1, sidewindow×0.7)
+  dfl: 2.5                                     # 分布焦点损失增益 (P2上4x4cells有助分布回归, 保持中高权重确保框精度)
 
-  box: 8.5                                     # 边界框损失权重
-  cls: 0.5                                    # 分类损失权重
-  cls_pw: 0.0                                 # 类别权重幂次
-  dfl: 1.5                                    # 分布焦点损失权重
-
-  close_mosaic: 100                           # 最后 N 轮关闭 Mosaic
-  seed: 0                                     # 随机种子
-  deterministic: true                          # 确定性模式
+  close_mosaic: 50                              # 最后 N 轮关闭 Mosaic (灰度图场景稳定, 50轮足够恢复)
+  seed: 0                                      # 随机种子 (默认 0, 用于结果可复现)
+  deterministic: true                          # 确定性操作 (保证可复现, 可能略慢)
 
 augmentation:
-  hsv_h: 0.015                                # HSV 色调增强
-  hsv_s: 0.7                                  # HSV 饱和度增强
-  hsv_v: 0.4                                  # HSV 亮度增强
-  degrees: 5.0                                # 旋转角度
-  translate: 0.15                             # 平移比例
-  scale: 0.5                                  # 缩放范围
-  shear: 3.0                                   # 剪切角度
-  perspective: 0.0                            # 透视变换
+  hsv_h: 0.0                                   # 灰度图无色调, 关闭
+  hsv_s: 0.0                                   # 灰度图无饱和度, 关闭
+  hsv_v: 0.2                                   # 明度增强 (灰度图唯一有效通道, 场景亮度变化大需适度增强)
+  degrees: 3.0                                 # 随机旋转角度 ± (小角度, 避免旋转丢失小目标)
+  translate: 0.1                               # 随机平移比例 ±
+  scale: 0.12                                  # 随机缩放增益 ± (P2对缩放更鲁棒, 适度放宽; person最小16px→14px安全)
+  shear: 0.0                                   # 剪切 (关闭, 对小目标有害)
+  perspective: 0.0                             # 透视变换 (关闭, 对小目标有害)
   flipud: 0.0                                  # 垂直翻转概率
-  fliplr: 0.5                                 # 水平翻转概率
-  bgr: 0.0                                    # BGR 通道交换概率
-  mosaic: 1.0                                  # Mosaic 增强概率
-  mixup: 0.05                                 # MixUp 增强概率
+  fliplr: 0.5                                  # 水平翻转概率
+  bgr: 0.0                                     # RGB↔BGR 通道交换
+  mosaic: 1.0                                  # Mosaic 增强概率 (小目标受益于多图拼接增加上下文)
+  mixup: 0.0                                   # MixUp 增强概率 (关闭, 小目标mixup易丢失)
   cutmix: 0.0                                  # CutMix 增强概率
-  copy_paste: 0.0                             # 复制粘贴增强
 
 validation:
-  val: true                                   # 是否进行验证
-  conf: 0.25                                  # 置信度阈值
-  iou: 0.7                                    # NMS IoU 阈值
-  max_det: 300                                # 最大检测数
-  half: false                                 # FP16 半精度验证
-  plots: true                                 # 生成验证可视化图
-  save_json: false                             # 保存 COCO 格式 JSON
-  dnn: false                                  # OpenCV DNN 推理
-  agnostic_nms: false                         # 类别无关 NMS
-  augment: false                              # 测试时增强 TTA
+  val: true                                    # 训练期间是否运行验证
+  conf: 0.001                                  # 置信度阈值 (val 默认 0.001, predict 默认 0.25)
+  iou: 0.7                                     # NMS IoU 阈值 (默认 0.7, 越大保留越多框)
+  max_det: 300                                 # 每图最大检测数 (默认 300)
+  half: false                                  # FP16 半精度验证
+  plots: true                                  # 生成验证图表 (PR曲线/混淆矩阵/F1曲线等)
+  save_json: false                             # 保存 COCO 格式 JSON 结果 (用于官方评估工具)
+  dnn: false                                   # 使用 OpenCV DNN 进行 ONNX 推理验证
+  agnostic_nms: false                          # 类别无关 NMS (不同类别框也做 NMS)
+  augment: false                               # 测试时增强 TTA (慢但可能提升精度)
+  save_conf: false                             # 在 txt 标签中保存置信度分数
+  int8: false                                  # INT8 量化推理验证
+  end2end: true                                # 端到端检测头 (YOLO26/YOLOv10, 免 NMS)
 
 output:
-  project: runs/chaoyuan                   # 结果保存目录
-  name: 20260501                              # 实验名称
-  save_period: -1                            # 每 N 轮保存权重
-  exist_ok: true                              # 覆盖已有目录
-  verbose: true                               # 详细日志
+  project: chaoyuan                            # 结果保存根目录 (null=默认 runs/)
+  name: train_20260505                         # 实验名称 (null=自动命名)
+  save_period: -1                              # 每 N 轮保存检查点 (-1=只保存 best/last)
+  exist_ok: true                               # 是否覆盖已有目录 (true=覆盖, false=自动递增名称)
+  verbose: true                                # 详细日志输出

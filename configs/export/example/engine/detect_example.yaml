@@ -3,25 +3,32 @@
 
 model:
   path: runs/detect/train/weights/best.pt  # 模型路径 (.pt 权重 或 .onnx)
-  format: engine  # 导出格式: onnx/torchscript/openvino/engine 等
-  imgsz: 640  # 输入图像尺寸 (默认 640, 分类建议 224)
-  batch: 1  # 批次大小 (推理默认 1, 训练默认 16)
-  device: 0  # 计算设备: null=自动, cpu, 0, 0,1 等
+  format: engine                           # 导出格式: onnx/torchscript/openvino/engine 等
+  imgsz: 640                               # 输入图像尺寸 (默认 640, 分类建议 224)
+  batch: 1                                 # 批次大小 (推理默认 1, 训练默认 16)
+  device: 0                                # 计算设备: null=自动, cpu, 0, 0,1 等
 
 export:
-  half: true  # FP16 半精度导出 (加速推理, 可能略降精度)
-  dynamic: false  # 动态输入形状 (ONNX/OpenVINO/TensorRT 支持)
-  simplify: true  # 简化 ONNX 计算图 (默认 true, 推荐开启)
-  opset: null  # ONNX opset 版本 (null=自动选择)
-  nms: false  # 在导出模型中嵌入 NMS (部分后端支持)
-  int8: false  # INT8 量化导出 (需要校准数据集)
-  fraction: 1.0  # INT8 校准数据集使用比例 (默认 1.0)
-  workspace: 4  # TensorRT 工作区大小 (GB, 默认 4)
+  half: true                               # FP16 半精度导出 (加速推理, 可能略降精度)
+  dynamic: false                           # 动态输入形状 (ONNX/OpenVINO/TensorRT 支持)
+  simplify: true                           # 简化 ONNX 计算图 (默认 true, 推荐开启)
+  opset: null                              # ONNX opset 版本 (null=自动选择)
+  nms: false                               # 在导出模型中嵌入 NMS (部分后端支持)
+                                           # NMS 选项 (nms=True 时生效)
+                                           # conf: 0.25            # NMS 置信度阈值 (nms=True 时生效, 默认 0.25)
+                                           # iou: 0.7              # NMS IoU 阈值 (nms=True 时生效, 默认 0.7)
+                                           # max_det: 300           # 最大检测数 (nms=True 时生效, 默认 300)
+                                           # agnostic_nms: false    # 类别无关 NMS (nms=True 时生效)
+  end2end: null                             # 端到端检测头 (YOLO26/YOLOv10, 免 NMS)
+  int8: false                              # INT8 量化导出 (需要校准数据集)
+  data: null                               # INT8 校准数据集配置 (int8=true 时必需)
+  fraction: 1.0                            # INT8 校准数据集使用比例 (默认 1.0)
+  workspace: 4                             # TensorRT 工作区大小 (GB, 默认 4)
 
 output:
-  path: null  # 自定义输出路径
-  verbose: true  # 详细日志输出
+  path: null                               # 自定义输出路径
+  verbose: true                            # 详细日志输出
 
 verify:
-  enabled: true  # 导出后是否验证模型
-  source: null  # 验证用测试图像路径 (null=使用虚拟图像)
+  enabled: true                            # 导出后是否验证模型
+  source: null                             # 验证用测试图像路径 (null=使用虚拟图像)

@@ -22,6 +22,8 @@ Typical usage::
     python -m commands.export --config configs/export/onnx.yaml
 """
 
+from __future__ import annotations
+
 import argparse
 import shutil
 import sys
@@ -31,14 +33,14 @@ from pathlib import Path
 from typing import Any, Dict
 
 from utils.config import (
+    config_from_args,
     get_nested_value,
     load_yaml_config,
     merge_configs,
     set_boolean_argument,
     setup_ultralytics_path,
-    to_bool,
 )
-from utils.constants import EXPORT_FORMATS
+from utils.constants import DEFAULT_IMGSZ, EXPORT_FORMATS
 
 setup_ultralytics_path()
 from ultralytics import YOLO
@@ -95,6 +97,13 @@ Examples:
     set_boolean_argument(parser, "half", "half", help_true="FP16 半精度导出", help_false="全精度导出")
     set_boolean_argument(parser, "nms", "nms", help_true="在导出模型中嵌入 NMS", help_false="不嵌入 NMS")
 
+    # ── NMS options (when nms=True) ──────────────────────────────────────
+    parser.add_argument("--conf", type=float, default=None, help="NMS 置信度阈值 (nms=True 时生效, 默认 0.25)")
+    parser.add_argument("--iou", type=float, default=None, help="NMS IoU 阈值 (nms=True 时生效, 默认 0.7)")
+    parser.add_argument("--max-det", type=int, default=None, help="最大检测数 (nms=True 时生效, 默认 300)")
+    set_boolean_argument(parser, "agnostic_nms", "agnostic-nms", help_true="类别无关 NMS", help_false="类别特定 NMS")
+    set_boolean_argument(parser, "end2end", "end2end", help_true="端到端检测头 (YOLO26/YOLOv10)", help_false="标准检测头")
+
     # ── TorchScript options ────────────────────────────────────────────
     set_boolean_argument(parser, "optimize", "optimize", help_true="TorchScript 移动端优化", help_false="不优化")
 
@@ -126,73 +135,46 @@ def args_to_config(args: argparse.Namespace) -> Dict[str, Any]:
     config = {}
 
     # ── Model ──
-    model_config = {}
-    if args.model:
-        model_config["path"] = args.model
-    if args.format:
-        model_config["format"] = args.format
-    if args.imgsz is not None:
-        model_config["imgsz"] = args.imgsz
-    if args.batch is not None:
-        model_config["batch"] = args.batch
-    if args.device is not None:
-        model_config["device"] = args.device
-    if model_config:
-        config["model"] = model_config
+    model_cfg = config_from_args(
+        args,
+        plain=("model", "format", "imgsz", "batch", "device"),
+        rename={"model": "path"},
+    )
+    if model_cfg:
+        config["model"] = model_cfg
 
     # ── Export options ──
-    export_config = {}
-    if args.opset is not None:
-        export_config["opset"] = args.opset
-    v = to_bool(args.simplify)
-    if v is not None:
-        export_config["simplify"] = v
-    v = to_bool(args.dynamic)
-    if v is not None:
-        export_config["dynamic"] = v
-    v = to_bool(args.half)
-    if v is not None:
-        export_config["half"] = v
-    v = to_bool(args.nms)
-    if v is not None:
-        export_config["nms"] = v
-    v = to_bool(args.optimize)
-    if v is not None:
-        export_config["optimize"] = v
-    v = to_bool(args.int8)
-    if v is not None:
-        export_config["int8"] = v
-    if args.data:
-        export_config["data"] = args.data
-    if args.fraction is not None:
-        export_config["fraction"] = args.fraction
-    if args.workspace is not None:
-        export_config["workspace"] = args.workspace
-    v = to_bool(args.keras)
-    if v is not None:
-        export_config["keras"] = v
-    if export_config:
-        config["export"] = {**config.get("export", {}), **export_config}
+    export_plain = (
+        "opset", "data", "fraction", "workspace",
+        "conf", "iou", "max_det",
+    )
+    export_bool = (
+        "simplify", "dynamic", "half", "nms",
+        "optimize", "int8", "keras", "agnostic_nms", "end2end",
+    )
+    export_cfg = config_from_args(args, plain=export_plain, boolean=export_bool)
+    if export_cfg:
+        config["export"] = {**config.get("export", {}), **export_cfg}
 
     # ── Output ──
-    output_config = {}
-    if args.output:
-        output_config["path"] = args.output
-    v = args.verbose
-    if v is not None:
-        output_config["verbose"] = v
-    if output_config:
-        config["output"] = {**config.get("output", {}), **output_config}
+    out_cfg = config_from_args(
+        args,
+        plain=("output",),
+        boolean=("verbose",),
+        rename={"output": "path"},
+    )
+    if out_cfg:
+        config["output"] = {**config.get("output", {}), **out_cfg}
 
     # ── Verification ──
-    verify_config = {}
-    v = to_bool(args.verify)
-    if v is not None:
-        verify_config["enabled"] = v
-    if args.source:
-        verify_config["source"] = args.source
-    if verify_config:
-        config["verify"] = {**config.get("verify", {}), **verify_config}
+    verify_cfg = config_from_args(
+        args,
+        plain=("source",),
+        boolean=("verify",),
+        rename={"verify": "enabled"},
+    )
+    if verify_cfg:
+        config["verify"] = {**config.get("verify", {}), **verify_cfg}
 
     return config
 
@@ -200,7 +182,7 @@ def args_to_config(args: argparse.Namespace) -> Dict[str, Any]:
 # ─── Verify exported model ────────────────────────────────────────────
 
 
-def verify_export(exported_path: str, model_path: str, imgsz: int = 640, source: str | None = None):
+def verify_export(exported_path: str, imgsz: int = 640, source: str | None = None):
     """通过运行快速推理测试来验证导出的模型。"""
     import cv2
     import numpy as np
@@ -262,7 +244,7 @@ def export(config: Dict):
     """将 YOLO 模型导出为指定格式。"""
     model_path = get_nested_value(config, "model", "path")
     fmt = get_nested_value(config, "model", "format", default="onnx")
-    imgsz = get_nested_value(config, "model", "imgsz", default=640)
+    imgsz = get_nested_value(config, "model", "imgsz", default=DEFAULT_IMGSZ)
     batch = get_nested_value(config, "model", "batch", default=1)
     device = get_nested_value(config, "model", "device")
 
@@ -275,9 +257,16 @@ def export(config: Dict):
     optimize = get_nested_value(config, "export", "optimize", default=False)
     int8 = get_nested_value(config, "export", "int8", default=False)
     data = get_nested_value(config, "export", "data")
-    fraction = get_nested_value(config, "export", "fraction", default=1.0)
-    workspace = get_nested_value(config, "export", "workspace", default=4)
-    keras = get_nested_value(config, "export", "keras", default=False)
+    fraction = get_nested_value(config, "export", "fraction")
+    workspace = get_nested_value(config, "export", "workspace")
+    keras = get_nested_value(config, "export", "keras")
+
+    # NMS 选项 (nms=True 时生效)
+    conf = get_nested_value(config, "export", "conf")
+    iou_export = get_nested_value(config, "export", "iou")
+    max_det = get_nested_value(config, "export", "max_det")
+    agnostic_nms = get_nested_value(config, "export", "agnostic_nms")
+    end2end = get_nested_value(config, "export", "end2end")
 
     # 输出选项
     output_path = get_nested_value(config, "output", "path")
@@ -357,8 +346,19 @@ def export(config: Dict):
         export_args["fraction"] = fraction
     if workspace is not None and fmt == "engine":
         export_args["workspace"] = workspace
-    if keras is not None:
+    if keras is not None and fmt == "saved_model":
         export_args["keras"] = keras
+    # NMS params
+    if conf is not None:
+        export_args["conf"] = conf
+    if iou_export is not None:
+        export_args["iou"] = iou_export
+    if max_det is not None:
+        export_args["max_det"] = max_det
+    if agnostic_nms is not None:
+        export_args["agnostic_nms"] = agnostic_nms
+    if end2end is not None:
+        export_args["end2end"] = end2end
 
     # 运行导出
     start_time = time.perf_counter()
@@ -418,7 +418,7 @@ def export(config: Dict):
 
     # 验证
     if verify:
-        verify_export(final_path, str(model_path), imgsz, source)
+        verify_export(final_path, imgsz, source)
 
     return final_path
 

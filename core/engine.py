@@ -11,7 +11,7 @@ import numpy as np
 from core.parser import parse_pytorch_result
 from core.types import DetectionResult, ImageResult, NMSConfig
 from utils.config import setup_ultralytics_path
-from utils.constants import LETTERBOX_FILL_VALUE
+from utils.constants import DEFAULT_IMGSZ, LETTERBOX_FILL_VALUE
 
 setup_ultralytics_path()
 
@@ -48,7 +48,7 @@ class YOLOInference:
         model_path: str,
         nms_config: Optional[NMSConfig] = None,
         device: str = "auto",
-        imgsz: int = 640,
+        imgsz: int = DEFAULT_IMGSZ,
         classes: Optional[List[int]] = None,
         batch_size: int = 1,
         stream: bool = False,
@@ -66,6 +66,7 @@ class YOLOInference:
         dnn: bool = False,
         end2end: Optional[bool] = None,
         show: bool = False,
+        show_boxes: Optional[bool] = None,
     ):
         self.model_path = Path(model_path)
         self.nms_config = nms_config or NMSConfig()
@@ -88,6 +89,7 @@ class YOLOInference:
         self.dnn = dnn
         self.end2end = end2end
         self.show = show
+        self.show_boxes = show_boxes
 
         self.model_format = self._detect_format()
         self.model = None
@@ -201,6 +203,12 @@ class YOLOInference:
     def postprocess_onnx(
         self, outputs: np.ndarray, orig_shape: Tuple[int, int], pad: Tuple[int, int], r: float
     ) -> List[DetectionResult]:
+        """ONNX 后处理。
+
+        注意: 当前仅支持 detect 任务的通用检测输出格式。
+        segment/pose/obb/classify 任务的 ONNX 后处理暂未实现，
+        建议使用 PyTorch (.pt) 模型进行这些任务的推理。
+        """
         if isinstance(outputs, (list, tuple)):
             output = outputs[0]
         else:
@@ -335,7 +343,7 @@ class YOLOInference:
             arr = arr.flatten()
         return arr.astype(np.int64)
 
-    def _predict_kwargs(self) -> dict:
+    def get_predict_kwargs(self) -> dict:
         kwargs = dict(
             imgsz=self.imgsz,
             conf=self.nms_config.conf_threshold,
@@ -366,24 +374,22 @@ class YOLOInference:
         # kpt_thres: 仅在显式设置时传递 (姿态任务关键点置信度过滤)
         if self.nms_config.kpt_thres is not None:
             kwargs["kpt_thres"] = self.nms_config.kpt_thres
-        # 分割任务专用: 高分辨率分割掩码
-        if self.task_type == "segment" and self.retina_masks:
-            kwargs["retina_masks"] = self.retina_masks
+        kwargs["retina_masks"] = self.retina_masks
+        # show_boxes: 仅在显式设置时传递
+        if self.show_boxes is not None:
+            kwargs["show_boxes"] = self.show_boxes
         # topk: 仅在分类任务时传递给后端
         if self.task_type == "classify" and self.nms_config.topk is not None:
             kwargs["topk"] = self.nms_config.topk
         return kwargs
 
     def inference_pytorch(self, image: np.ndarray) -> ImageResult:
-        start_time = time.perf_counter()
-        results = self.model.predict(image, **self._predict_kwargs())
-        inference_time = time.perf_counter() - start_time
         image_shape = image.shape[:2]
+        results = self.model.predict(image, **self.get_predict_kwargs())
         if results and len(results) > 0:
             result = parse_pytorch_result(results[0], self.classes, image_shape)
         else:
             result = ImageResult(image_path="array", image_shape=image_shape)
-        result.inference_time = inference_time
         return result
 
     def inference_onnx(self, image: np.ndarray) -> ImageResult:
@@ -419,19 +425,24 @@ class YOLOInference:
         return result
 
     def inference_batch_pytorch(self, images: List[np.ndarray]) -> List[ImageResult]:
-        start_time = time.perf_counter()
-        results = self.model.predict(images, **self._predict_kwargs())
-        inference_time = time.perf_counter() - start_time
-        per_image_time = inference_time / max(len(images), 1)
+        results = self.model.predict(images, **self.get_predict_kwargs())
         all_results = []
         for idx, result in enumerate(results):
             image_shape = images[idx].shape[:2]
             image_result = parse_pytorch_result(result, self.classes, image_shape)
-            image_result.inference_time = per_image_time
             all_results.append(image_result)
         return all_results
 
     def inference_batch(self, images: List[np.ndarray]) -> List[ImageResult]:
+        start_time = time.perf_counter()
+
         if self.model_format == "onnx":
-            return [self.inference_onnx(img) for img in images]
-        return self.inference_batch_pytorch(images)
+            results = [self.inference_onnx(img) for img in images]
+        else:
+            results = self.inference_batch_pytorch(images)
+
+        elapsed = time.perf_counter() - start_time
+        per_image_time = elapsed / max(len(images), 1)
+        for r in results:
+            r.inference_time = per_image_time
+        return results

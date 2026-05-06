@@ -6,7 +6,16 @@ import cv2
 import numpy as np
 
 from core.types import ImageResult
-from utils.constants import COLOR_GRAY, COLOR_GREEN, COLOR_ORANGE, COLOR_WHITE
+from utils.constants import (
+    COLOR_GRAY,
+    COLOR_GREEN,
+    COLOR_ORANGE,
+    COLOR_WHITE,
+    DEFAULT_KPT_LINE,
+    DEFAULT_KPT_RADIUS,
+    DEFAULT_MASK_ALPHA,
+    generate_class_colors,
+)
 
 
 def draw_dashed_line(
@@ -35,6 +44,25 @@ def draw_dashed_line(
         cv2.line(img, (sx, sy), (ex, ey), color, thickness)
 
 
+def _get_keypoint_visibility(kpt_arr, idx):
+    """判断关键点可见性级别。
+
+    Returns:
+        2 = 可见, 1 = 遮挡, 0 = 不可见
+    """
+    if len(kpt_arr) > 2:
+        v = kpt_arr[2]
+        if v >= 1.5:
+            return 2
+        elif v == 1.0:
+            return 1
+        elif v >= 0.5:
+            return 2
+        else:
+            return 0
+    return 2
+
+
 def draw_detections(
     image: np.ndarray,
     result: ImageResult,
@@ -43,9 +71,9 @@ def draw_detections(
     font_scale: float = 0.5,
     show_labels: bool = True,
     show_conf: bool = True,
-    mask_alpha: float = 0.4,
-    kpt_radius: int = 5,
-    kpt_line: bool = True,
+    mask_alpha: float = DEFAULT_MASK_ALPHA,
+    kpt_radius: int = DEFAULT_KPT_RADIUS,
+    kpt_line: bool = DEFAULT_KPT_LINE,
     line_width: Optional[int] = None,
     skeleton: Optional[List[Tuple[int, int]]] = None,
     kpt_names: Optional[Dict[int, List[str]]] = None,
@@ -56,8 +84,7 @@ def draw_detections(
     pose(关键点+边框), obb(旋转边框)。
     """
     output = image.copy()
-    rng = np.random.default_rng(42)
-    colors = rng.integers(0, 255, size=(len(classes) + 10, 3), dtype=np.uint8)
+    colors = generate_class_colors(len(classes))
 
     # 分类任务
     if result.task_type == "classify" and result.probs is not None:
@@ -147,26 +174,13 @@ def draw_detections(
             if kpts.ndim != 2:
                 kpts = kpts.reshape(-1, kpts.shape[-1])
 
-            def _get_vis(kpt_arr, idx):
-                if len(kpt_arr) > 2:
-                    v = kpt_arr[2]
-                    if v >= 1.5:          # training label v=2 (visible)
-                        return 2
-                    elif v == 1.0:        # training label v=1 (occluded)
-                        return 1
-                    elif v >= 0.5:        # inference confidence >= 0.5 (visible)
-                        return 2
-                    else:
-                        return 0
-                return 2
-
             if kpt_line and skeleton is not None:
                 for i, j in skeleton:
                     if i < len(kpts) and j < len(kpts):
                         pt1 = (int(kpts[i][0]), int(kpts[i][1]))
                         pt2 = (int(kpts[j][0]), int(kpts[j][1]))
-                        vis_i = _get_vis(kpts[i], i)
-                        vis_j = _get_vis(kpts[j], j)
+                        vis_i = _get_keypoint_visibility(kpts[i], i)
+                        vis_j = _get_keypoint_visibility(kpts[j], j)
                         if vis_i == 2 and vis_j == 2:
                             cv2.line(output, pt1, pt2, COLOR_GREEN, max(2, box_thickness))
                         elif vis_i >= 1 and vis_j >= 1:
@@ -176,7 +190,7 @@ def draw_detections(
 
             for kidx, kpt in enumerate(kpts):
                 x, y = int(kpt[0]), int(kpt[1])
-                vis = _get_vis(kpt, kidx)
+                vis = _get_keypoint_visibility(kpt, kidx)
                 if vis == 2:
                     cv2.circle(output, (x, y), kpt_radius, COLOR_GREEN, -1)
                     cv2.circle(output, (x, y), kpt_radius, COLOR_WHITE, 1)

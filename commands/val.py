@@ -31,6 +31,7 @@ from utils.config import (
     setup_ultralytics_path,
     to_bool,
 )
+from utils.constants import DEFAULT_BATCH_SIZE, DEFAULT_IMGSZ
 
 setup_ultralytics_path()
 from ultralytics import YOLO
@@ -74,12 +75,15 @@ Examples:
 
     # ── Core validation ───────────────────────────────────────────────
     parser.add_argument("--imgsz", type=int, default=None, help="输入图像尺寸 (默认 640)")
-    parser.add_argument("--batch", type=int, default=None, help="批大小 (默认 16)")
-    parser.add_argument("--device", type=str, default=None, help="设备: cpu, 0, 0,1, mps")
+    parser.add_argument("--batch", type=int, default=None, help="批次大小 (默认 16)")
+    parser.add_argument("--device", type=str, default=None, help="计算设备: cpu, 0, 0,1, mps")
     parser.add_argument("--conf", type=float, default=None, help="置信度阈值 (默认 0.25)")
     parser.add_argument("--iou", type=float, default=None, help="NMS IoU 阈值 (默认 0.7)")
     parser.add_argument("--max-det", type=int, default=None, help="每张图最大检测数 (默认 300)")
     parser.add_argument("--classes", nargs="+", type=int, default=None, help="按类别 ID 过滤 (如 0 或 0 1 2)")
+    parser.add_argument("--embed", type=int, nargs="+", default=None, help="特征嵌入层索引")
+    parser.add_argument("--vid-stride", type=int, default=None, help="视频帧间隔")
+    parser.add_argument("--fraction", type=float, default=None, help="使用数据集的比例 (0.0-1.0)")
     set_boolean_argument(parser, "half", "half", help_true="FP16 半精度验证", help_false="全精度验证")
     set_boolean_argument(parser, "plots", "plots", help_true="保存验证图表", help_false="不保存图表")
     set_boolean_argument(
@@ -112,6 +116,18 @@ Examples:
         parser, "end2end", "end2end",
         help_true="端到端检测头验证 (YOLO26/YOLOv10)", help_false="标准验证"
     )
+    parser.add_argument(
+        "--kpt-thres", type=float, default=None,
+        help="关键点置信度阈值 (仅 pose 任务)",
+    )
+    parser.add_argument(
+        "--topk", type=int, default=None,
+        help="分类 Top-K 结果数 (仅 classify 任务)",
+    )
+    parser.add_argument(
+        "--source", type=str, default=None,
+        help="验证数据源路径 (图片/目录/视频, 覆盖 data.config 的 val 划分)",
+    )
 
     # ── Output ────────────────────────────────────────────────────────
     parser.add_argument("--project", type=str, default=None, help="结果根目录的项目名")
@@ -130,9 +146,9 @@ def args_to_config(args: argparse.Namespace) -> Dict[str, Any]:
     """将命令行参数转换为嵌套配置字典。"""
     config = {}
 
-    # Model (imgsz/batch/device 也属于 model 节，与 validate() 读取一致)
     model_cfg = config_from_args(
-        args, plain=("model", "task", "classes", "imgsz", "batch", "device"),
+        args, plain=("model", "task", "classes", "imgsz", "batch", "device",
+                     "embed", "vid_stride", "source", "topk", "kpt_thres"),
         rename={"model": "name"}
     )
     if model_cfg:
@@ -150,7 +166,7 @@ def args_to_config(args: argparse.Namespace) -> Dict[str, Any]:
         args,
         boolean=("half", "plots", "save_json", "dnn", "agnostic_nms",
                  "augment", "rect", "save_conf", "int8", "end2end"),
-        plain=("conf", "iou", "max_det"),
+        plain=("conf", "iou", "max_det", "fraction"),
     )
     if val_cfg:
         config["validation"] = {**config.get("validation", {}), **val_cfg}
@@ -177,8 +193,8 @@ def validate(config: Dict):
     val_args = {
         "data": get_nested_value(config, "data", "config", default="coco8.yaml"),
         "split": get_nested_value(config, "data", "split", default="val"),
-        "imgsz": resolve_config_value(config, ("model", "imgsz"), ("train", "imgsz"), default=640),
-        "batch": resolve_config_value(config, ("model", "batch"), ("train", "batch"), default=16),
+        "imgsz": resolve_config_value(config, ("model", "imgsz"), ("train", "imgsz"), default=DEFAULT_IMGSZ),
+        "batch": resolve_config_value(config, ("model", "batch"), ("train", "batch"), default=DEFAULT_BATCH_SIZE),
         "iou": get_nested_value(config, "validation", "iou", default=0.7),
         "plots": get_nested_value(config, "validation", "plots", default=True),
         "save_json": get_nested_value(config, "validation", "save_json", default=False),
@@ -204,6 +220,20 @@ def validate(config: Dict):
     if classes is not None:
         val_args["classes"] = classes
 
+    task_from_config = get_nested_value(config, "model", "task")
+    if task_from_config is not None:
+        val_args["task"] = task_from_config
+
+    # embed: 特征嵌入层索引
+    embed = get_nested_value(config, "model", "embed")
+    if embed is not None:
+        val_args["embed"] = embed
+
+    # vid_stride: 视频帧间隔
+    vid_stride = get_nested_value(config, "model", "vid_stride")
+    if vid_stride is not None:
+        val_args["vid_stride"] = vid_stride
+
     # 矩形验证 (更快但精度略低)
     rect = get_nested_value(config, "validation", "rect")
     if rect is not None:
@@ -223,6 +253,33 @@ def validate(config: Dict):
     end2end = get_nested_value(config, "validation", "end2end")
     if end2end is not None:
         val_args["end2end"] = end2end
+
+    # 使用数据集比例
+    fraction = get_nested_value(config, "validation", "fraction")
+    if fraction is not None:
+        val_args["fraction"] = fraction
+
+    # 可选的保存/显示参数
+    for key in ("save_txt", "save_crop", "show", "show_labels", "show_conf",
+                "show_boxes", "line_width", "retina_masks", "visualize",
+                "workers", "cache"):
+        v = get_nested_value(config, "validation", key)
+        if v is not None:
+            val_args[key] = v
+
+    # kpt_thres / topk: 从 validation 节读取，回退到 model 节
+    kpt_thres = resolve_config_value(config, ("validation", "kpt_thres"), ("model", "kpt_thres"))
+    if kpt_thres is not None:
+        val_args["kpt_thres"] = kpt_thres
+
+    topk = resolve_config_value(config, ("validation", "topk"), ("model", "topk"))
+    if topk is not None:
+        val_args["topk"] = topk
+
+    # source: 直接指定验证数据源 (覆盖 data.config)
+    source = get_nested_value(config, "model", "source")
+    if source is not None:
+        val_args["source"] = source
 
     for key in ("project", "name", "save_period", "exist_ok"):
         v = get_nested_value(config, "output", key)
@@ -244,7 +301,7 @@ def validate(config: Dict):
     metrics = model.val(**val_args)
 
     # 根据任务类型打印对应的指标
-    task = model.task if hasattr(model, "task") else "detect"
+    task = task_from_config or (model.task if hasattr(model, "task") else "detect")
 
     print(f"\n{'='*60}")
     print("验证结果")

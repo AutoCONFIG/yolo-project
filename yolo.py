@@ -6,6 +6,7 @@ Route commands to the appropriate module:
     python yolo.py train   --config configs/train/chaoyuan.yaml
     python yolo.py val     --config configs/validate/val.yaml
     python yolo.py predict --model best.pt --source images/
+    python yolo.py track   --model best.pt --input video.mp4
     python yolo.py export  --model best.pt --format onnx
 
 Each command module can also be invoked directly:
@@ -13,6 +14,7 @@ Each command module can also be invoked directly:
     python -m commands.train   --config ...
     python -m commands.val     --config ...
     python -m commands.predict --model ...
+    python -m commands.track   --model ...
     python -m commands.export  --model ...
 """
 
@@ -23,6 +25,7 @@ MODES = {
     "train": "commands.train",
     "val": "commands.val",
     "predict": "commands.predict",
+    "track": "commands.track",
     "export": "commands.export",
 }
 

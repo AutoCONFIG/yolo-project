@@ -95,5 +95,5 @@ class NMSConfig:
     iou_threshold: float = DEFAULT_IOU_THRESHOLD
     max_detections: int = DEFAULT_MAX_DETECTIONS
     agnostic: bool = False
-    kpt_thres: float = DEFAULT_KPT_THRESHOLD
-    topk: int = DEFAULT_TOPK
+    kpt_thres: Optional[float] = None  # 仅 pose 任务使用, None=不传递给后端
+    topk: Optional[int] = None  # 仅 classify 任务使用, None=不传递给后端

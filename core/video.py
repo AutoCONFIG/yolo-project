@@ -10,7 +10,13 @@ import numpy as np
 from core.engine import YOLOInference
 from core.types import ImageResult
 from core.visualization import draw_detections
-from utils.constants import IMG_EXTENSIONS, VIDEO_EXTENSIONS
+from utils.constants import (
+    DEFAULT_KPT_LINE,
+    DEFAULT_KPT_RADIUS,
+    DEFAULT_MASK_ALPHA,
+    IMG_EXTENSIONS,
+    VIDEO_EXTENSIONS,
+)
 
 
 # ─── File utilities ─────────────────────────────────────────────────────────
@@ -77,7 +83,7 @@ def inference_video(
     src_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     src_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    out_fps = (fps if fps is not None else src_fps) / vid_stride
+    out_fps = fps if fps is not None else src_fps / vid_stride
 
     writer = None
     video_out_path = None
@@ -123,9 +129,9 @@ def inference_video(
                     show_labels=vis_cfg.get("show_labels", True) if vis_cfg else True,
                     show_conf=vis_cfg.get("show_conf", True) if vis_cfg else True,
                     line_width=vis_cfg.get("line_width") if vis_cfg else None,
-                    mask_alpha=vis_cfg.get("mask_alpha", 0.4) if vis_cfg else 0.4,
-                    kpt_radius=vis_cfg.get("kpt_radius", 5) if vis_cfg else 5,
-                    kpt_line=vis_cfg.get("kpt_line", True) if vis_cfg else True,
+                    mask_alpha=vis_cfg.get("mask_alpha", DEFAULT_MASK_ALPHA) if vis_cfg else DEFAULT_MASK_ALPHA,
+                    kpt_radius=vis_cfg.get("kpt_radius", DEFAULT_KPT_RADIUS) if vis_cfg else DEFAULT_KPT_RADIUS,
+                    kpt_line=vis_cfg.get("kpt_line", DEFAULT_KPT_LINE) if vis_cfg else DEFAULT_KPT_LINE,
                     skeleton=skeleton,
                     kpt_names=kpt_names,
                 )

@@ -3,44 +3,49 @@
 
 model:
   path: runs/obb/train/weights/best.pt  # 模型路径 (.pt 权重 或 .onnx)
-  imgsz: 1024  # 输入图像尺寸 (默认 640, 分类建议 224)
-  device: auto  # 计算设备: null=自动, cpu, 0, 0,1 等
-  batch: 1  # 批次大小 (推理默认 1, 训练默认 16)
-  stream: false  # 流式推理模式 (视频/摄像头推荐 true)
-  vid_stride: 1  # 视频跳帧间隔 (1=每帧处理, 2=隔一帧处理)
-  visualize: false  # 可视化模型特征图 (调试用)
-  augment: false  # 测试时增强 TTA (慢但可能提升精度)
-  int8: false  # INT8 量化推理 (ONNX/TensorRT 等支持)
-  dnn: false  # 使用 OpenCV DNN 进行 ONNX 推理
-  show: false  # 弹窗显示结果 (需图形界面支持)
-  save_frames: false  # 保存视频推理的每一帧为图片
-  stream_buffer: false  # 流式缓冲所有帧 (true=缓冲, false=只保留最新帧)
-  line_width:           # 后端渲染线宽 (null=自动缩放)
-  show_boxes: true      # 后端是否绘制检测框 (前端可视化开启时建议设为 false)
-  embed: null  # 特征嵌入层索引 (调试用, 默认 null)
-  save_conf: false  # 保存置信度到结果 (后端保存)
+  imgsz: 1024                           # 输入图像尺寸 (默认 640, 分类建议 224)
+  device: null                          # 计算设备: null=自动, cpu, 0, 0,1 等
+  batch: 1                              # 批次大小 (推理默认 1, 训练默认 16)
+  stream: false                         # 流式推理模式 (视频/摄像头推荐 true)
+  vid_stride: 1                         # 视频跳帧间隔 (1=每帧处理, 2=隔一帧处理)
+  visualize: false                      # 可视化模型特征图 (调试用)
+  augment: false                        # 测试时增强 TTA (慢但可能提升精度)
+  int8: false                           # INT8 量化推理 (ONNX/TensorRT 等支持)
+  dnn: false                            # 使用 OpenCV DNN 进行 ONNX 推理
+  show: false                           # 弹窗显示结果 (需图形界面支持)
+  save_frames: false                    # 保存视频推理的每一帧为图片
+  stream_buffer: false                  # 流式缓冲所有帧 (true=缓冲, false=只保留最新帧)
+  line_width:                           # 后端渲染线宽 (null=自动缩放)
+  show_boxes: true                      # 后端是否绘制检测框 (前端可视化开启时建议设为 false)
+  embed: null                           # 特征嵌入层索引 (调试用, 默认 null)
+  save_conf: false                      # 保存置信度到结果 (后端保存)
+  half: false                           # FP16 半精度推理 (需 GPU 支持)
+  end2end:                              # 端到端检测头 (YOLO26/YOLOv10, 免 NMS)
+  classes: null                         # 类别过滤 (null=全部, [0,1]=只保留指定类别)
 
 io:
-  input: datasets/test/images  # 输入路径 (图片/目录/视频/URL/摄像头编号)
-  output: runs/inference/obb  # 输出目录路径
-  save_vis: true  # 保存可视化结果图片/视频
-  save_json: false  # 保存推理结果为 JSON 格式
-  save_txt: false  # 保存 YOLO 格式 txt 标签
-  save_crop: false  # 保存裁剪后的检测目标图片
+  input: datasets/test/images           # 输入路径 (图片/目录/视频/URL/摄像头编号)
+  output: runs/inference/obb            # 输出目录路径
+  save_vis: true                        # 保存可视化结果图片/视频
+  save_json: false                      # 保存推理结果为 JSON 格式
+  save_txt: false                       # 保存 YOLO 格式 txt 标签
+  save_crop: false                      # 保存裁剪后的检测目标图片
 
 nms:
-  conf: 0.25  # 置信度阈值 (默认 0.25)
-  iou: 0.7  # NMS IoU 阈值 (默认 0.7, 越大保留越多框)
-  max_det: 300  # 每图最大检测数 (默认 300)
-  agnostic_nms: false  # 类别无关 NMS (不同类别框也做 NMS)
+  conf: 0.25                            # 置信度阈值 (默认 0.25)
+  iou: 0.7                              # NMS IoU 阈值 (默认 0.7, 越大保留越多框)
+  max_det: 300                          # 每图最大检测数 (默认 300)
+  agnostic_nms: false                   # 类别无关 NMS (不同类别框也做 NMS)
 
 visualization:
-  box_thickness: 2  # 边框线宽 (前端可视化, 默认 2)
-  font_scale: 0.5  # 标签字体比例 (前端可视化, 默认 0.5)
-  show_labels: true  # 显示类别标签 (前端可视化)
-  show_conf: true  # 显示置信度分数 (前端可视化)
+  box_thickness: 2                      # 边框线宽 (前端可视化, 默认 2)
+  font_scale: 0.5                       # 标签字体比例 (前端可视化, 默认 0.5)
+  show_labels: true                     # 显示类别标签 (前端可视化)
+  show_conf: true                       # 显示置信度分数 (前端可视化)
 
 video:
-  codec: mp4v  # 视频编码器 fourcc 码 (默认 mp4v)
+  fps: null                            # 输出视频帧率 (null=使用原视频帧率)
+  codec: mp4v                           # 视频编码器 fourcc 码 (默认 mp4v)
 
-verbose: true  # 详细日志输出
+output:
+  verbose: true                         # 详细日志输出

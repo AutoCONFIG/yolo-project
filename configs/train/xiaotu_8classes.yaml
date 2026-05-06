@@ -3,81 +3,85 @@
 # 小兔8类检测训练配置 - YOLO26s
 
 model:
-  name: yolo26s.yaml  # 模型名称或权重路径
-  pretrained: false  # 预训练权重: false=从头训练, true=默认权重, 路径=指定权重
-  task: detect  # 任务类型: detect/segment/classify/pose/obb
+  name: yolo26s.yaml                             # 模型路径或名称 (如 yolo26n.pt)
+  pretrained: false                              # 预训练权重: false=从头训练, true=默认权重, 路径=指定权重
+  task: detect                                   # 任务类型: detect/segment/classify/pose/obb
 
 data:
   config: configs/datasets/xiaotu_8classes.yaml  # 数据集配置文件路径
-  split: val  # 数据集划分: train/val/test
+  split: val                                     # 数据集划分: train/val/test
 
 train:
-  epochs: 100  # 总训练轮数 (早停可能提前结束)
-  batch: 24  # 批次大小 (推理默认 1, 训练默认 16)
-  imgsz: 640  # 输入图像尺寸 (默认 640, 分类建议 224)
-  device: null  # 计算设备: null=自动, cpu, 0, 0,1 等
-  workers: 8  # 数据加载进程数 (HDD 建议 1-2, SSD 建议 4-8)
-  resume: false  # 从 last.pt 恢复训练 (true=自动查找检查点)
-  patience: 50  # 早停耐心轮数 (N 轮无提升则停止, 默认 100)
-  cache: true  # 图像缓存: ram/disk/false (缓存可加速但占用资源)
-  save: true  # 是否保存训练检查点
-  amp: true  # 自动混合精度训练 (FP16, 加速且省显存)
-  rect: false  # 矩形批量训练 (减少 padding, 加速但可能略降精度)
-  single_cls: false  # 单类别模式 (所有类别视为一个)
-  fraction: 1.0  # 使用数据集比例 (1.0=全部, 0.1=10% 子集)
-  freeze:  # 冻结前 N 层 (如 10, 用于迁移学习)
-  multi_scale: 0.5  # 多尺度训练范围 (0.0=关闭, 0.5=±50%)
-  compile: false  # torch.compile 优化 (PyTorch 2.0+, 可能加速)
-  end2end: true  # 端到端检测头 (YOLO26/YOLOv10, 免 NMS)
-  nbs: 24  # 名义批次大小 (用于损失归一化, 默认 64)
-  optimizer: AdamW  # 优化器: SGD/Adam/AdamW/auto (默认 auto)
-  lr0: 0.01  # 初始学习率 (SGD=0.01, Adam=0.001)
-  lrf: 0.001  # 最终学习率比例 (最终 LR = lr0 * lrf)
-  momentum: 0.937  # SGD 动量 / Adam beta1 (默认 0.937)
-  weight_decay: 0.001  # 权重衰减 L2 正则化 (默认 0.0005)
-  cos_lr: true  # 余弦学习率调度 (false=阶梯衰减)
-  warmup_epochs: 3.0  # 预热轮数 (学习率从低到高线性增长)
-  warmup_momentum: 0.8  # 预热初始动量 (默认 0.8)
-  warmup_bias_lr: 0.1  # 预热偏置学习率 (默认 0.1)
-  box: 7.5  # 边界框损失增益 (默认 7.5)
-  cls: 0.5  # 分类损失增益 (默认 0.5)
-  cls_pw: 1.0  # 类别权重幂次 (处理类别不平衡, 0=关闭)
-  dfl: 1.5  # 分布焦点损失增益 (DFL, 默认 1.5)
-  close_mosaic: 15  # 最后 N 轮关闭 Mosaic 增强 (默认 10, 0=不关闭)
-  seed: 0  # 随机种子 (默认 0, 用于结果可复现)
-  deterministic: true  # 确定性操作 (保证可复现, 可能略慢)
+  epochs: 100                                    # 总训练轮数 (早停可能提前结束)
+  time:                                          # 最大训练时长(小时), 设置后覆盖 epochs
+  batch: 24                                      # 批次大小 (推理默认 1, 训练默认 16)
+  imgsz: 640                                     # 输入图像尺寸 (默认 640, 分类建议 224)
+  device: null                                   # 计算设备: null=自动, cpu, 0, 0,1 等
+  workers: 8                                     # 数据加载进程数 (HDD 建议 1-2, SSD 建议 4-8)
+  resume: false                                  # 从 last.pt 恢复训练 (true=自动查找检查点)
+  patience: 50                                   # 早停耐心轮数 (N 轮无提升则停止, 默认 100)
+  cache: true                                    # 图像缓存: ram/disk/false (缓存可加速但占用资源)
+  save: true                                     # 是否保存训练检查点
+  amp: true                                      # 自动混合精度训练 (FP16, 加速且省显存)
+  rect: false                                    # 矩形批量训练 (减少 padding, 加速但可能略降精度)
+  single_cls: false                              # 单类别模式 (所有类别视为一个)
+  fraction: 1.0                                  # 使用数据集比例 (1.0=全部, 0.1=10% 子集)
+  freeze:                                        # 冻结前 N 层 (如 10, 用于迁移学习)
+  multi_scale: 0.5                               # 多尺度训练范围 (0.0=关闭, 0.5=±50%)
+  compile: false                                 # torch.compile 优化 (PyTorch 2.0+, 可能加速)
+  profile: false                                 # 性能分析 ONNX/TensorRT 推理速度
+  end2end: true                                  # 端到端检测头 (YOLO26/YOLOv10, 免 NMS)
+  nbs: 24                                        # 名义批次大小 (用于损失归一化, 默认 64)
+  optimizer: AdamW                               # 优化器: SGD/Adam/AdamW/auto (默认 auto)
+  lr0: 0.01                                      # 初始学习率 (SGD=0.01, Adam=0.001)
+  lrf: 0.001                                     # 最终学习率比例 (最终 LR = lr0 * lrf)
+  momentum: 0.937                                # SGD 动量 / Adam beta1 (默认 0.937)
+  weight_decay: 0.001                            # 权重衰减 L2 正则化 (默认 0.0005)
+  cos_lr: true                                   # 余弦学习率调度 (false=阶梯衰减)
+  warmup_epochs: 3.0                             # 预热轮数 (学习率从低到高线性增长)
+  warmup_momentum: 0.8                           # 预热初始动量 (默认 0.8)
+  warmup_bias_lr: 0.1                            # 预热偏置学习率 (默认 0.1)
+  box: 7.5                                       # 边界框损失增益 (默认 7.5)
+  cls: 0.5                                       # 分类损失增益 (默认 0.5)
+  cls_pw: 1.0                                    # 类别权重幂次 (处理类别不平衡, 0=关闭)
+  dfl: 1.5                                       # 分布焦点损失增益 (DFL, 默认 1.5)
+  close_mosaic: 15                               # 最后 N 轮关闭 Mosaic 增强 (默认 10, 0=不关闭)
+  seed: 0                                        # 随机种子 (默认 0, 用于结果可复现)
+  deterministic: true                            # 确定性操作 (保证可复现, 可能略慢)
 
 augmentation:
-  hsv_h: 0.015  # HSV 色调增强幅度 (默认 0.015)
-  hsv_s: 0.7  # HSV 饱和度增强幅度 (默认 0.7)
-  hsv_v: 0.4  # HSV 明度增强幅度 (默认 0.4)
-  degrees: 5.0  # 随机旋转角度 ± (默认 0.0)
-  translate: 0.1  # 随机平移比例 ± (默认 0.1)
-  scale: 0.9  # 随机缩放增益 ± (默认 0.5)
-  shear: 2.0  # 随机剪切角度 ± (默认 0.0)
-  perspective: 0.001  # 随机透视变换比例 (默认 0.0)
-  flipud: 0.0  # 垂直翻转概率 (默认 0.0)
-  fliplr: 0.5  # 水平翻转概率 (默认 0.5)
-  bgr: 0.0  # RGB↔BGR 通道交换概率 (默认 0.0)
-  mosaic: 1.0  # Mosaic 增强概率 (默认 1.0, classify 建议 0.0)
-  mixup: 0.1  # MixUp 增强概率 (默认 0.0)
-  cutmix: 0.0  # CutMix 增强概率 (默认 0.0)
-  copy_paste: 0.1  # 复制粘贴增强概率 (segment 任务专用, 默认 0.0)
+  hsv_h: 0.015                                   # HSV 色调增强幅度 (默认 0.015)
+  hsv_s: 0.7                                     # HSV 饱和度增强幅度 (默认 0.7)
+  hsv_v: 0.4                                     # HSV 明度增强幅度 (默认 0.4)
+  degrees: 5.0                                   # 随机旋转角度 ± (默认 0.0)
+  translate: 0.1                                 # 随机平移比例 ± (默认 0.1)
+  scale: 0.9                                     # 随机缩放增益 ± (默认 0.5)
+  shear: 2.0                                     # 随机剪切角度 ± (默认 0.0)
+  perspective: 0.001                             # 随机透视变换比例 (默认 0.0)
+  flipud: 0.0                                    # 垂直翻转概率 (默认 0.0)
+  fliplr: 0.5                                    # 水平翻转概率 (默认 0.5)
+  bgr: 0.0                                       # RGB↔BGR 通道交换概率 (默认 0.0)
+  mosaic: 1.0                                    # Mosaic 增强概率 (默认 1.0, classify 建议 0.0)
+  mixup: 0.1                                     # MixUp 增强概率 (默认 0.0)
+  cutmix: 0.0                                    # CutMix 增强概率 (默认 0.0)
 
 validation:
-  val: true  # 训练期间是否运行验证
-  conf: 0.25  # 置信度阈值 (val 默认 0.001, predict 默认 0.25)
-  iou: 0.7  # NMS IoU 阈值 (默认 0.7, 越大保留越多框)
-  max_det: 300  # 每图最大检测数 (默认 300)
-  half: false  # FP16 半精度验证
-  plots: true  # 生成验证图表 (PR曲线/混淆矩阵/F1曲线等)
-  save_json: false  # 保存 COCO 格式 JSON 结果 (用于官方评估工具)
-  dnn: false  # 使用 OpenCV DNN 进行 ONNX 推理验证
-  agnostic_nms: false  # 类别无关 NMS (不同类别框也做 NMS)
-  augment: false  # 测试时增强 TTA (慢但可能提升精度)
+  val: true                                      # 训练期间是否运行验证
+  conf:                                           # 置信度阈值 (val 默认 0.001, predict 默认 0.25)
+  iou: 0.7                                       # NMS IoU 阈值 (默认 0.7, 越大保留越多框)
+  max_det: 300                                   # 每图最大检测数 (默认 300)
+  half: false                                    # FP16 半精度验证
+  plots: true                                    # 生成验证图表 (PR曲线/混淆矩阵/F1曲线等)
+  save_json: false                               # 保存 COCO 格式 JSON 结果 (用于官方评估工具)
+  dnn: false                                     # 使用 OpenCV DNN 进行 ONNX 推理验证
+  agnostic_nms: false                            # 类别无关 NMS (不同类别框也做 NMS)
+  augment: false                                 # 测试时增强 TTA (慢但可能提升精度)
+  save_conf: false                               # 在 txt 标签中保存置信度分数
+  int8: false                                    # INT8 量化推理验证
+  end2end: true                                  # 端到端检测头 (YOLO26/YOLOv10, 免 NMS)
 
 output:
-  name: xiaotu_8classes  # 实验名称 (null=自动命名)
-  save_period: -1  # 每 N 轮保存检查点 (-1=只保存 best/last)
-  exist_ok: false  # 是否覆盖已有目录 (true=覆盖, false=自动递增名称)
-  verbose: true  # 详细日志输出
+  name: xiaotu_8classes                          # 实验名称 (null=自动命名)
+  save_period: -1                                # 每 N 轮保存检查点 (-1=只保存 best/last)
+  exist_ok: false                                # 是否覆盖已有目录 (true=覆盖, false=自动递增名称)
+  verbose: true                                  # 详细日志输出

@@ -18,6 +18,7 @@ Typical usage::
 
 import argparse
 import sys
+import threading
 import traceback
 from pathlib import Path
 from typing import Any, Dict
@@ -28,13 +29,77 @@ from utils.config import (
     get_nested_value,
     load_yaml_config,
     merge_configs,
+    resolve_config_value,
     set_boolean_argument,
     setup_ultralytics_path,
     to_bool,
 )
+from utils.constants import DEFAULT_IMGSZ
 
 setup_ultralytics_path()
 from ultralytics import YOLO
+from ultralytics.utils import LOGGER
+
+
+def _safe_wrap_plot_methods(validator):
+    for attr in ("plot_val_samples", "plot_predictions"):
+        orig = getattr(validator, attr, None)
+        if orig is None:
+            continue
+
+        def _make_safe(fn):
+            def _safe(*args, **kwargs):
+                try:
+                    return fn(*args, **kwargs)
+                except (ValueError, IndexError):
+                    pass
+            return _safe
+
+        setattr(validator, attr, _make_safe(orig))
+
+
+def _make_val_plot_callback(train_args: dict):
+    _plot_thread = None
+    _plot_lock = threading.Lock()
+
+    def _on_train_start(trainer):
+        def _force_plots_on_val_start(validator):
+            if validator.training:
+                validator.args.plots = True
+
+        trainer.validator.add_callback("on_val_start", _force_plots_on_val_start)
+
+        _safe_wrap_plot_methods(trainer.validator)
+
+    def _run_plot_metrics(trainer):
+        nonlocal _plot_thread
+        try:
+            trainer.plot_metrics()
+        except Exception as e:
+            LOGGER.warning(f"异步绘制训练曲线失败 (epoch {trainer.epoch + 1}): {e}")
+
+    def _on_fit_epoch_end(trainer):
+        nonlocal _plot_thread
+        epoch = trainer.epoch
+        final = (epoch + 1) >= trainer.epochs
+
+        if final:
+            if _plot_thread is not None and _plot_thread.is_alive():
+                _plot_thread.join(timeout=300)
+            return
+
+        if _plot_thread is not None and _plot_thread.is_alive():
+            return
+
+        if not trainer.csv.exists():
+            return
+
+        t = threading.Thread(target=_run_plot_metrics, args=(trainer,), daemon=True)
+        with _plot_lock:
+            _plot_thread = t
+        t.start()
+
+    return _on_train_start, _on_fit_epoch_end
 
 
 # ─── Argument parser ─────────────────────────────────────────────────
@@ -106,8 +171,8 @@ Examples:
         "--cache",
         type=str,
         default=None,
-        choices=["ram", "disk"],
-        help="缓存图像到内存或磁盘以加速训练",
+        choices=["ram", "disk", "true", "false"],
+        help="缓存图像到内存或磁盘以加速训练 (true=ram, false=关闭)",
     )
     set_boolean_argument(parser, "save", "save", help_true="保存训练检查点", help_false="不保存检查点")
     set_boolean_argument(parser, "amp", "amp", help_true="自动混合精度训练", help_false="禁用 AMP")
@@ -214,6 +279,8 @@ Examples:
     parser.add_argument("--conf", type=float, default=None, help="置信度阈值")
     parser.add_argument("--iou", type=float, default=None, help="NMS IoU 阈值 (默认 0.7)")
     parser.add_argument("--max-det", type=int, default=None, help="每张图最大检测数 (默认 300)")
+    parser.add_argument("--kpt-thres", type=float, default=None, help="关键点置信度阈值 (仅 pose)")
+    parser.add_argument("--topk", type=int, default=None, help="分类 Top-K (仅 classify)")
 
     # ── Output ────────────────────────────────────────────────────────
     parser.add_argument("--project", type=str, default=None, help="结果根目录的项目名")
@@ -228,6 +295,10 @@ Examples:
     set_boolean_argument(
         parser, "dnn", "dnn", help_true="使用 OpenCV DNN 进行 ONNX 推理", help_false="不使用 DNN"
     )
+
+    # ── Advanced ──────────────────────────────────────────────────────
+    parser.add_argument("--cfg", type=str, default=None, help="覆盖默认配置的 YAML 文件路径")
+    parser.add_argument("--tracker", type=str, default=None, help="跟踪器配置文件 (botsort.yaml/bytetrack.yaml)")
 
     return parser.parse_args()
 
@@ -278,13 +349,18 @@ def args_to_config(args: argparse.Namespace) -> Dict[str, Any]:
         "lr0", "lrf", "momentum", "weight_decay", "close_mosaic", "seed",
         "warmup_epochs", "warmup_momentum", "warmup_bias_lr",
         "box", "cls", "cls_pw", "dfl", "pose", "kobj", "rle", "angle",
-        "mask_ratio", "dropout", "auto_augment", "erasing",
+        "mask_ratio", "dropout",
     )
     train_bool = (
         "save", "amp", "rect", "single_cls", "end2end", "profile",
         "deterministic", "overlap_mask",
     )
     train_cfg = config_from_args(args, plain=train_plain, boolean=train_bool)
+    # 特殊处理: cache 支持 true/false 字符串
+    if "cache" in train_cfg:
+        cache_val = to_bool(train_cfg["cache"])
+        if cache_val is not None:
+            train_cfg["cache"] = cache_val
     # 特殊处理: resume/cos_lr/compile 保持原值语义
     if args.resume is not None:
         train_cfg["resume"] = args.resume
@@ -303,7 +379,7 @@ def args_to_config(args: argparse.Namespace) -> Dict[str, Any]:
 
     # Validation
     val_cfg = config_from_args(
-        args, boolean=("val", "half", "plots", "dnn"), plain=("conf", "iou", "max_det")
+        args, boolean=("val", "half", "plots", "dnn"), plain=("conf", "iou", "max_det", "kpt_thres", "topk")
     )
     if val_cfg:
         config["validation"] = {**config.get("validation", {}), **val_cfg}
@@ -316,6 +392,11 @@ def args_to_config(args: argparse.Namespace) -> Dict[str, Any]:
     )
     if out_cfg:
         config["output"] = {**config.get("output", {}), **out_cfg}
+
+    if args.cfg is not None:
+        config["cfg"] = args.cfg
+    if args.tracker is not None:
+        config["tracker"] = args.tracker
 
     return config
 
@@ -333,8 +414,7 @@ def train(config: Dict):
     train_args = {
         "data": data_config,
         "epochs": get_nested_value(config, "train", "epochs", default=100),
-        "batch": get_nested_value(config, "train", "batch", default=16),
-        "imgsz": get_nested_value(config, "train", "imgsz", default=640),
+        "imgsz": get_nested_value(config, "train", "imgsz", default=DEFAULT_IMGSZ),
         "workers": get_nested_value(config, "train", "workers", default=8),
         "optimizer": get_nested_value(config, "train", "optimizer", default="auto"),
         "lr0": get_nested_value(config, "train", "lr0", default=0.01),
@@ -366,13 +446,18 @@ def train(config: Dict):
     # 可选参数: 仅在配置中显式设置时才传递
     for key in (
         "device", "cache", "time", "rect", "single_cls", "freeze",
-        "compile", "end2end", "profile",
+        "compile", "profile", "batch",
         "cls_pw", "pose", "kobj", "rle", "angle", "overlap_mask",
         "mask_ratio", "dropout",
     ):
         v = get_nested_value(config, "train", key)
         if v is not None:
             train_args[key] = v
+
+    # end2end: 从 train 节读取，回退到 validation 节
+    end2end_val = resolve_config_value(config, ("train", "end2end"), ("validation", "end2end"))
+    if end2end_val is not None:
+        train_args["end2end"] = end2end_val
 
     # classes 过滤器: 从 model 配置节读取 (与 val/predict 一致)
     classes = get_nested_value(config, "model", "classes")
@@ -385,10 +470,16 @@ def train(config: Dict):
     if task is not None:
         train_args["task"] = task
 
+    split = get_nested_value(config, "data", "split")
+    if split is not None:
+        train_args["split"] = split
+
     # Validation 节参数 -> 传给 train (ultralytics model.train 统一接受)
-    # 注意: save_json 是验证参数，不应传给 train
     for key in ("val", "conf", "iou", "max_det", "half", "plots", "dnn",
-                "agnostic_nms", "augment", "save_conf", "int8"):
+                "agnostic_nms", "augment", "save_conf", "save_json", "int8",
+                "save_txt", "save_crop", "show", "show_labels", "show_conf",
+                "show_boxes", "line_width", "retina_masks", "visualize",
+                "kpt_thres", "topk", "embed", "vid_stride"):
         v = get_nested_value(config, "validation", key)
         if v is not None:
             train_args[key] = v
@@ -412,8 +503,15 @@ def train(config: Dict):
     project = train_args.get("project")
     name = train_args.get("name")
 
-    project_root = PROJECT_ROOT
-    save_dir = (project_root / str(project) / str(name)).resolve() if project or name else None
+    project_root = PROJECT_ROOT / "runs" / (task or "detect")
+    if not name:
+        name = "train"
+        train_args["name"] = name
+    if project:
+        save_dir = (project_root / project / name).resolve()
+    else:
+        save_dir = (project_root / name).resolve()
+    train_args["save_dir"] = str(save_dir)
 
     print(f"\n{'='*60}")
     print("YOLO 训练配置")
@@ -422,7 +520,7 @@ def train(config: Dict):
     print(f"预训练:    {pretrained}")
     print(f"数据集:    {data_config}")
     print(f"轮数:      {train_args['epochs']}")
-    print(f"批大小:    {train_args['batch']}")
+    print(f"批大小:    {train_args.get('batch', 'auto (默认16)')}")
     print(f"图像尺寸:  {train_args['imgsz']}")
     print(f"设备:      {train_args.get('device', 'auto')}")
     print(f"缓存:      {train_args.get('cache', 'False')}")
@@ -438,13 +536,19 @@ def train(config: Dict):
         model = YOLO(str(last_pt))
     else:
         if resume:
-            print(f"检查点未找到: {last_pt}, 从零开始训练")
+            print(f"检查点未找到{f': {last_pt}' if last_pt else ' (未指定 project/name)'}, 从零开始训练")
         if model_yaml:
             model = YOLO(model_yaml, task=task) if task else YOLO(model_yaml)
             if isinstance(pretrained, str):
                 model.load(pretrained)
         else:
             model = YOLO(model_name)
+
+    plots = train_args.get("plots", True)
+    if plots:
+        on_train_start, on_fit_epoch_end = _make_val_plot_callback(train_args)
+        model.add_callback("on_train_start", on_train_start)
+        model.add_callback("on_fit_epoch_end", on_fit_epoch_end)
 
     results = model.train(**train_args)
 

@@ -1,16 +1,17 @@
-# YOLO Segmentation Inference Configuration
-# ======================================
+# YOLO Detection + Tracking Inference Configuration
+# ==================================================
+# 目标检测+跟踪推理配置示例
+# 注意: 跟踪 (track) 使用 detect 模型，通过 tracker 配置启用跟踪功能
 
 model:
-  path: runs/segment/train/weights/best.pt  # 模型路径 (.pt 权重 或 .onnx)
+  path: runs/detect/train/weights/best.pt   # 模型路径 (.pt 权重 或 .onnx)
   imgsz: 640                                # 输入图像尺寸 (默认 640, 分类建议 224)
   device: null                              # 计算设备: null=自动, cpu, 0, 0,1 等
   batch: 1                                  # 批次大小 (推理默认 1, 训练默认 16)
-  stream: false                             # 流式推理模式 (视频/摄像头推荐 true)
+  stream: true                              # 流式推理模式 (视频/摄像头推荐 true)
   vid_stride: 1                             # 视频跳帧间隔 (1=每帧处理, 2=隔一帧处理)
   visualize: false                          # 可视化模型特征图 (调试用)
   augment: false                            # 测试时增强 TTA (慢但可能提升精度)
-  retina_masks: false                       # 高分辨率分割掩码 (segment 任务专用)
   int8: false                               # INT8 量化推理 (ONNX/TensorRT 等支持)
   dnn: false                                # 使用 OpenCV DNN 进行 ONNX 推理
   show: false                               # 弹窗显示结果 (需图形界面支持)
@@ -25,8 +26,8 @@ model:
   classes: null                             # 类别过滤 (null=全部, [0,1]=只保留指定类别)
 
 io:
-  input: datasets/test/images               # 输入路径 (图片/目录/视频/URL/摄像头编号)
-  output: runs/inference/segment            # 输出目录路径
+  input: datasets/test/video.mp4            # 输入路径 (视频/目录/URL/摄像头编号)
+  output: runs/inference/track              # 输出目录路径
   save_vis: true                            # 保存可视化结果图片/视频
   save_json: false                          # 保存推理结果为 JSON 格式
   save_txt: false                           # 保存 YOLO 格式 txt 标签
@@ -43,11 +44,15 @@ visualization:
   font_scale: 0.5                           # 标签字体比例 (前端可视化, 默认 0.5)
   show_labels: true                         # 显示类别标签 (前端可视化)
   show_conf: true                           # 显示置信度分数 (前端可视化)
-  mask_alpha: 0.4                           # 分割掩码叠加透明度 (默认 0.4)
 
 video:
-  fps: null                                 # 输出视频帧率 (null=使用原视频帧率)
+  fps: null                                # 输出视频帧率 (null=使用原视频帧率)
   codec: mp4v                               # 视频编码器 fourcc 码 (默认 mp4v)
 
 output:
   verbose: true                             # 详细日志输出
+
+# Tracker settings (track 任务专用)
+# 支持: botsort.yaml (默认, 带 ReID) 或 bytetrack.yaml (轻量级)
+# 也可指定自定义 tracker YAML 文件路径
+tracker: botsort.yaml

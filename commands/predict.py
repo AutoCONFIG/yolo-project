@@ -42,7 +42,11 @@ from utils.config import (
     to_bool,
 )
 from utils.constants import (
+    DEFAULT_IMGSZ,
     DEFAULT_IOU_THRESHOLD,
+    DEFAULT_KPT_LINE,
+    DEFAULT_KPT_RADIUS,
+    DEFAULT_MASK_ALPHA,
     DEFAULT_MAX_DETECTIONS,
     DEFAULT_PREDICT_OUTPUT,
 )
@@ -79,6 +83,10 @@ def _save_result(
             font_scale=vis_cfg.get("font_scale", 0.5),
             show_labels=vis_cfg.get("show_labels", True),
             show_conf=vis_cfg.get("show_conf", True),
+            mask_alpha=vis_cfg.get("mask_alpha", DEFAULT_MASK_ALPHA),
+            kpt_radius=vis_cfg.get("kpt_radius", DEFAULT_KPT_RADIUS),
+            kpt_line=vis_cfg.get("kpt_line", DEFAULT_KPT_LINE),
+            line_width=vis_cfg.get("line_width"),
             skeleton=skeleton, kpt_names=kpt_names,
         )
         vis_path = output_path / "vis" / rel_path
@@ -165,17 +173,13 @@ def parse_args() -> argparse.Namespace:
         epilog="""
 Examples:
     python -m commands.predict --model best.pt --input images/ --output results/
-    python -m commands.predict --model model.onnx --input images/ --format onnx
+    python -m commands.predict --model model.onnx --input images/
     python yolo.py predict --config configs/predict/chaoyuan.yaml
         """,
     )
 
     parser.add_argument("--config", "-c", type=str, default=None, help="YAML 配置文件路径")
     parser.add_argument("--model", "-m", type=str, default=None, help="模型路径 (.pt 或 .onnx)")
-    parser.add_argument(
-        "--format", "-f", type=str, choices=["auto", "pytorch", "onnx"], default="auto",
-        help="模型格式",
-    )
     parser.add_argument("--imgsz", type=int, default=None, help="输入图像尺寸")
     parser.add_argument("--device", type=str, default=None, help="设备: auto, cpu, cuda, 0")
     parser.add_argument("--batch", type=int, default=None, help="推理批大小")
@@ -217,6 +221,7 @@ Examples:
     parser.add_argument("--codec", type=str, default=None, help="视频编码器")
 
     parser.add_argument("--line-width", type=int, default=None, help="后端渲染边框线宽 (自动缩放)")
+    set_boolean_argument(parser, "show_boxes", "show-boxes", help_true="显示检测框", help_false="不显示检测框", neg_prefix="no-")
     set_boolean_argument(parser, "save_frames", "save-frames", help_true="保存视频帧", help_false="不保存帧", neg_prefix="no-")
     set_boolean_argument(parser, "show", "show", help_true="弹出窗口显示结果", help_false="不弹出窗口")
     set_boolean_argument(parser, "verbose", "verbose", help_true="详细输出", help_false="简洁输出", neg_prefix="no-")
@@ -231,10 +236,11 @@ def args_to_config(args: argparse.Namespace) -> Dict[str, Any]:
     # Model
     model_cfg = config_from_args(
         args,
-        plain=("model", "format", "imgsz", "device", "batch", "classes",
+        plain=("model", "imgsz", "device", "batch", "classes",
                "vid_stride", "embed", "line_width", "topk", "kpt_thres"),
         boolean=("stream", "half", "augment", "retina_masks", "visualize",
-                 "int8", "save_frames", "stream_buffer", "save_conf", "dnn", "end2end", "show"),
+                 "int8", "save_frames", "stream_buffer", "save_conf", "dnn", "end2end", "show",
+                 "show_boxes"),
         rename={"model": "path"},
     )
     if model_cfg:
@@ -269,7 +275,7 @@ def args_to_config(args: argparse.Namespace) -> Dict[str, Any]:
     # Verbose: 同时支持 output.verbose 和根级 verbose（向后兼容）
     v = to_bool(getattr(args, "verbose", None))
     if v is not None:
-        config["output"] = {"verbose": v}
+        config.setdefault("output", {})["verbose"] = v
 
     return config
 
@@ -280,7 +286,7 @@ def args_to_config(args: argparse.Namespace) -> Dict[str, Any]:
 def predict(config: Dict) -> None:
     """运行 YOLO 推理。"""
     model_path = get_nested_value(config, "model", "path")
-    imgsz = get_nested_value(config, "model", "imgsz", default=640)
+    imgsz = get_nested_value(config, "model", "imgsz", default=DEFAULT_IMGSZ)
     device = get_nested_value(config, "model", "device", default="auto")
     batch_size = get_nested_value(config, "model", "batch", default=1)
     classes_filter = get_nested_value(config, "model", "classes")
@@ -300,6 +306,7 @@ def predict(config: Dict) -> None:
     dnn = get_nested_value(config, "model", "dnn", default=False)
     end2end = resolve_config_value(config, ("model", "end2end"), ("nms", "end2end"), default=None)
     show = get_nested_value(config, "model", "show", default=False)
+    show_boxes = get_nested_value(config, "model", "show_boxes")
 
     input_path = get_nested_value(config, "io", "input")
     output_path = get_nested_value(config, "io", "output", default=DEFAULT_PREDICT_OUTPUT)
@@ -307,9 +314,7 @@ def predict(config: Dict) -> None:
     save_json = get_nested_value(config, "io", "save_json", default=False)
     save_txt = get_nested_value(config, "io", "save_txt", default=False)
     save_crop = get_nested_value(config, "io", "save_crop", default=False)
-    verbose = get_nested_value(config, "output", "verbose")
-    if verbose is None:
-        verbose = config.get("verbose", False)
+    verbose = get_nested_value(config, "output", "verbose", default=False)
 
     if not model_path:
         raise ValueError("--model 或配置 model.path 是必需的")
@@ -321,8 +326,8 @@ def predict(config: Dict) -> None:
         iou_threshold=get_nested_value(config, "nms", "iou", default=DEFAULT_IOU_THRESHOLD),
         max_detections=get_nested_value(config, "nms", "max_det", default=DEFAULT_MAX_DETECTIONS),
         agnostic=get_nested_value(config, "nms", "agnostic_nms", default=False),
-        kpt_thres=resolve_config_value(config, ("model", "kpt_thres"), ("nms", "kpt_thres"), default=0.5),
-        topk=resolve_config_value(config, ("model", "topk"), ("nms", "topk"), default=5),
+        kpt_thres=resolve_config_value(config, ("model", "kpt_thres"), ("nms", "kpt_thres")),
+        topk=resolve_config_value(config, ("model", "topk"), ("nms", "topk")),
     )
 
     skeleton_cfg = get_nested_value(config, "visualization", "skeleton")
@@ -361,6 +366,7 @@ def predict(config: Dict) -> None:
         dnn=dnn,
         end2end=end2end,
         show=show,
+        show_boxes=show_boxes,
     )
 
     input_path_obj = Path(input_path)

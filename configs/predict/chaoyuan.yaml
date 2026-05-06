@@ -1,41 +1,51 @@
-# YOLO Inference Configuration
+# YOLO 推理配置 - 潮源模型部署
 # =============================
-# 推理配置文件 - 潮源模型部署
 # 适用任务: detect (目标检测)
 
-# Model settings
 model:
-  path: ./runs/chaoyuan/20260501/weights/best.pt  # 模型路径 (.pt 或 .onnx)
-  imgsz: 640                                      # 输入图像尺寸
-  device: cuda                                    # 运行设备: auto, cpu, cuda, 0
-  batch: 64                                       # 批次大小 (64适合16G显存)
-  stream: false                                   # 流式推理模式
+  path: runs/detect/chaoyuan/train/weights/best.pt  # 模型路径 (.pt 权重 或 .onnx)
+  imgsz: 1280                                       # 输入图像尺寸 (默认 640, 分类建议 224)
+  device: auto                                      # 计算设备: null=自动, cpu, 0, 0,1 等
+  batch: 32                                         # 批次大小 (推理默认 1, 训练默认 16)
+  stream: true                                      # 流式推理模式 (视频/摄像头推荐 true)
+  vid_stride: 1                                     # 视频跳帧间隔 (1=每帧处理, 2=隔一帧处理)
+  visualize: false                                  # 可视化模型特征图 (调试用)
+  augment: false                                    # 测试时增强 TTA (慢但可能提升精度)
+  int8: false                                       # INT8 量化推理 (ONNX/TensorRT 等支持)
+  dnn: false                                        # 使用 OpenCV DNN 进行 ONNX 推理
+  show: false                                       # 弹窗显示结果 (需图形界面支持)
+  save_frames: false                                # 保存视频推理的每一帧为图片
+  stream_buffer: false                              # 流式缓冲所有帧 (true=缓冲, false=只保留最新帧)
+  line_width:                                       # 后端渲染线宽 (null=自动缩放)
+  show_boxes: true                                  # 后端是否绘制检测框 (前端可视化开启时建议设为 false)
+  embed: null                                       # 特征嵌入层索引 (调试用, 默认 null)
+  save_conf: false                                  # 保存置信度到结果 (后端保存)
+  half: false                                       # FP16 半精度推理 (需 GPU 支持)
+  end2end:                                          # 端到端检测头 (YOLO26/YOLOv10, 免 NMS)
+  classes: null                                     # 类别过滤 (null=全部, [0,1]=只保留指定类别)
 
-# Input/Output settings
 io:
-  input: C:\Users\maoer\Desktop\20260430任务_1                        # 输入路径 (图片/目录/视频)
-  output: runs/predict                            # 输出目录
-  save_vis: true                                  # 保存可视化结果
-  save_json: false                                # 保存JSON结果
-  save_txt: true                                  # 保存YOLO格式标签
+  input: /home/yun/Desktop/20260430任务_2            # 输入路径 (图片/目录/视频/URL/摄像头编号)
+  output: runs/predict/train_20260430任务_2          # 输出目录路径
+  save_vis: true                                    # 保存可视化结果图片/视频
+  save_json: false                                  # 保存推理结果为 JSON 格式
+  save_txt: true                                    # 保存 YOLO 格式 txt 标签
+  save_crop: false                                  # 保存裁剪后的检测目标图片
 
-# NMS (Non-Maximum Suppression) settings
 nms:
-  conf: 0.7                                       # 置信度阈值
-  iou: 0.7                                        # NMS IoU阈值
-  max_det: 100                                    # 最大检测数
-  agnostic_nms: true                              # 类别无关NMS
+  conf: 0.25                                        # 置信度阈值 (默认 0.25)
+  iou: 0.4                                          # NMS IoU 阈值 (默认 0.7, 越大保留越多框)
+  max_det: 100                                      # 每图最大检测数 (默认 300)
+  agnostic_nms: true                                # 类别无关 NMS (不同类别框也做 NMS)
 
-# Visualization settings
 visualization:
-  box_thickness: 2                                # 框线粗细
-  font_scale: 0.5                                 # 字体大小
-  show_labels: true                               # 显示类别标签
-  show_conf: true                                 # 显示置信度
+  box_thickness: 2                                  # 边框线宽 (前端可视化, 默认 2)
+  font_scale: 0.5                                   # 标签字体比例 (前端可视化, 默认 0.5)
+  show_labels: true                                 # 显示类别标签 (前端可视化)
+  show_conf: true                                   # 显示置信度分数 (前端可视化)
 
-# Video settings (仅视频输入时生效)
 video:
-  codec: mp4v                                     # 视频编码器
+  codec: mp4v                                       # 视频编码器 fourcc 码 (默认 mp4v)
 
-# Other settings
-verbose: true                                     # 详细输出
+output:
+  verbose: true                                     # 详细日志输出

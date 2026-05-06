@@ -42,8 +42,6 @@ COLOR_GRAY: Final[Tuple[int, int, int]] = (160, 160, 160)
 COLOR_ORANGE: Final[Tuple[int, int, int]] = (0, 165, 255)
 COLOR_GREEN: Final[Tuple[int, int, int]] = (0, 220, 0)
 COLOR_WHITE: Final[Tuple[int, int, int]] = (255, 255, 255)
-COLOR_RED: Final[Tuple[int, int, int]] = (0, 0, 255)
-COLOR_YELLOW: Final[Tuple[int, int, int]] = (0, 255, 255)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  Letterbox defaults

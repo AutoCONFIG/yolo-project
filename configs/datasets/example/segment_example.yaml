@@ -14,7 +14,7 @@ test: images/test                               # 测试集图像目录 (可选,
 
 # 类别名称映射 (class_id: class_name)
 # 重要: class_id 必须从 0 开始连续编号, 且与标签文件一致
-names:  # 类别名称映射 {class_id: class_name}
+names:                                          # 类别名称映射 {class_id: class_name}
   0: person                                     # 0=人物
   1: car                                        # 1=汽车
   2: dog                                        # 2=狗

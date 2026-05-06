@@ -56,6 +56,8 @@ Usage:
   python prepare_dataset.py --task auto  (默认，自动检测)
 """
 
+from __future__ import annotations
+
 import argparse
 import logging
 import os
@@ -68,14 +70,15 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from utils.constants import IMG_EXTENSIONS
+from utils.io import read_text_robust
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
 
 # ========== 可修改的默认参数 ==========
-DEFAULT_SOURCE = ""
-DEFAULT_OUTPUT = ""
+DEFAULT_SOURCE = "/home/yun/Desktop/20260430任务_1/ok"
+DEFAULT_OUTPUT = "/media/yun/de2a43ce-446c-4a62-99b3-8ddc6ea1ef87/datasets/ok"
 DEFAULT_VAL_RATIO = 0.2
 DEFAULT_SEED = 42
 DEFAULT_EMPTY_RATIO = 0  # 负样本比例 (0=不提取, 0.1=10%)
@@ -118,15 +121,15 @@ def detect_task_type(pairs: list[tuple[Path, Path]]) -> tuple[str, tuple[int, in
     col_counts: dict[int, int] = {}
     sample_limit = min(len(pairs), 50)
 
-    for txt_path, _ in pairs[:sample_limit]:
+    for _, txt_path in pairs[:sample_limit]:
         try:
-            with open(txt_path, "r", encoding="utf-8") as f:
-                for line in f:
-                    parts = line.strip().split()
-                    if not parts:
-                        continue
-                    n = len(parts)
-                    col_counts[n] = col_counts.get(n, 0) + 1
+            text = read_text_robust(txt_path)
+            for line in text.splitlines():
+                parts = line.strip().split()
+                if not parts:
+                    continue
+                n = len(parts)
+                col_counts[n] = col_counts.get(n, 0) + 1
         except (IOError, OSError) as e:
             logger.warning(f"跳过无法读取的文件: {txt_path}: {e}")
             continue
@@ -181,10 +184,14 @@ def find_pairs_recursive(source_dir: Path) -> tuple[list[tuple[Path, Path]], lis
                 empty_images.append(img_path)
                 continue
 
-            with open(txt_path, "r", encoding="utf-8") as fh:
-                if not any(line.strip() for line in fh):
+            try:
+                text = read_text_robust(txt_path)
+                if not any(line.strip() for line in text.splitlines()):
                     empty_images.append(img_path)
                     continue
+            except (IOError, OSError):
+                empty_images.append(img_path)
+                continue
 
             labeled_pairs.append((img_path, txt_path))
 
@@ -381,8 +388,9 @@ def process_label(src_txt: Path, dst_txt: Path, task_type: str = "pose", kpt_sha
     skipped = 0
     warns = 0
 
-    with open(src_txt, "r", encoding="utf-8") as fin, open(dst_txt, "w", encoding="utf-8") as fout:
-        for line_no, line in enumerate(fin, 1):
+    text = read_text_robust(src_txt)
+    with open(dst_txt, "w", encoding="utf-8") as fout:
+        for line_no, line in enumerate(text.splitlines(), 1):
             if not line.strip():
                 continue
 
@@ -428,9 +436,9 @@ def main():
                         help="随机种子（默认: %(default)d）")
     parser.add_argument("--empty-ratio", type=float, default=DEFAULT_EMPTY_RATIO,
                         help="负样本比例（0=不提取，默认: %(default).2f）")
-    parser.add_argument("--task", type=str, choices=["auto", "detect", "pose"],
+    parser.add_argument("--task", type=str, choices=["auto", "detect", "segment", "pose"],
                         default="auto",
-                        help="任务类型: auto=自动检测, detect=目标检测, pose=关键点（默认: auto）")
+                        help="任务类型: auto=自动检测, detect=目标检测, segment=实例分割, pose=关键点（默认: auto）")
     parser.add_argument("--kpt-shape", type=int, nargs=2, default=None,
                         metavar=("N_KPT", "N_DIM"),
                         help="手动指定关键点配置 (如: 4 3)，仅pose模式有效，auto模式覆盖自动检测")
@@ -492,6 +500,9 @@ def main():
             _, detected_kpt = detect_task_type(all_pairs)
             kpt_shape = detected_kpt if detected_kpt else KPT_SHAPE
         print(f"\n任务类型: pose (kpt_shape={kpt_shape})")
+    elif task_type == "segment":
+        kpt_shape = None
+        print(f"\n任务类型: segment (实例分割)")
     else:
         # detect 模式
         kpt_shape = None
@@ -596,13 +607,13 @@ val: images/val    # val images
         names_lines = "\n".join(f"  {i}: {name}" for i, name in enumerate(args.classes))
     else:
         max_cls = 0
-        for txt_path, _ in all_pairs[:100]:
+        for _, txt_path in all_pairs[:100]:
             try:
-                with open(txt_path, "r", encoding="utf-8") as f:
-                    for line in f:
-                        parts = line.strip().split()
-                        if parts:
-                            max_cls = max(max_cls, int(parts[0]))
+                text = read_text_robust(txt_path)
+                for line in text.splitlines():
+                    parts = line.strip().split()
+                    if parts:
+                        max_cls = max(max_cls, int(parts[0]))
             except (IOError, ValueError) as e:
                 logger.warning(f"解析类别时跳过文件: {txt_path}: {e}")
                 continue

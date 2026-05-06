@@ -3,7 +3,7 @@
 # 超远场景车辆/行人/车窗检测数据集
 # 适用任务: detect
 
-path: /media/yun/de2a43ce-446c-4a62-99b3-8ddc6ea1ef87/datasets/chaoyuan/  # 数据集根目录路径 (相对路径或绝对路径)
+path: /media/yun/de2a43ce-446c-4a62-99b3-8ddc6ea1ef87/datasets/ok  # 数据集根目录路径 (相对路径或绝对路径)
 
 train: images/train
 val: images/val  # 验证集图像目录 (相对于path)

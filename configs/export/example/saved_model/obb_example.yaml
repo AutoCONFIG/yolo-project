@@ -1,28 +1,29 @@
-# OpenVINO OBB Export Configuration
-# ===================================
+# TensorFlow SavedModel OBB Export Configuration
+# =============================================
 
 model:
   path: runs/obb/train/weights/best.pt  # 模型路径 (.pt 权重 或 .onnx)
-  format: openvino                      # 导出格式: onnx/torchscript/openvino/engine 等
+  format: saved_model                   # 导出格式: onnx/torchscript/openvino/engine 等
   imgsz: 1024                           # 输入图像尺寸 (默认 640, 分类建议 224)
   batch: 1                              # 批次大小 (推理默认 1, 训练默认 16)
-  device: cpu                           # 计算设备: null=自动, cpu, 0, 0,1 等
+  device: null                          # 计算设备: null=自动, cpu, 0, 0,1 等
 
 export:
   half: false                           # FP16 半精度导出 (加速推理, 可能略降精度)
   dynamic: false                        # 动态输入形状 (ONNX/OpenVINO/TensorRT 支持)
-  simplify: true                        # 简化 ONNX 计算图 (默认 true, 推荐开启)
+  simplify: false                       # 简化 ONNX 计算图 (默认 true, 推荐开启)
   opset: null                           # ONNX opset 版本 (null=自动选择)
   nms: false                            # 在导出模型中嵌入 NMS (部分后端支持)
-                                        # NMS 选项 (nms=True 时生效)
-                                        # conf: 0.25            # NMS 置信度阈值 (nms=True 时生效, 默认 0.25)
-                                        # iou: 0.7              # NMS IoU 阈值 (nms=True 时生效, 默认 0.7)
-                                        # max_det: 300           # 最大检测数 (nms=True 时生效, 默认 300)
-                                        # agnostic_nms: false    # 类别无关 NMS (nms=True 时生效)
-  end2end: null                             # 端到端检测头 (YOLO26/YOLOv10, 免 NMS)
+                                         # NMS 选项 (nms=True 时生效)
+                                         # conf: 0.25            # NMS 置信度阈值 (nms=True 时生效, 默认 0.25)
+                                         # iou: 0.7              # NMS IoU 阈值 (nms=True 时生效, 默认 0.7)
+                                         # max_det: 300           # 最大检测数 (nms=True 时生效, 默认 300)
+                                         # agnostic_nms: false    # 类别无关 NMS (nms=True 时生效)
+  end2end: null                          # 端到端检测头 (YOLO26/YOLOv10, 免 NMS)
   int8: false                           # INT8 量化导出 (需要校准数据集)
   data: null                            # INT8 校准数据集配置 (int8=true 时必需)
   fraction: 1.0                         # INT8 校准数据集使用比例 (默认 1.0)
+  keras: false                          # saved_model 专用: 启用 Keras 层 (默认 false)
 
 output:
   path: null                            # 自定义输出路径

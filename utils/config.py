@@ -16,10 +16,14 @@ Constants:
     PROJECT_ROOT: Absolute path to the project root directory.
 """
 
+from __future__ import annotations
+
 import argparse
 import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
+
+import copy
 
 import yaml
 
@@ -72,7 +76,7 @@ def merge_configs(base_config: Dict, override_args: Dict) -> Dict:
     Returns:
         Merged configuration dictionary.
     """
-    result = base_config.copy()
+    result = copy.deepcopy(base_config)
     for key, value in override_args.items():
         if value is not None:
             if key in result and isinstance(result[key], dict) and isinstance(value, dict):

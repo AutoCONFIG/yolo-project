@@ -28,6 +28,7 @@ nms:          # NMS thresholds (predict-only)
 visualization:# Drawing settings (predict-only)
 video:        # Video codec / fps (predict-only)
 output:       # Project/name/exist_ok/verbose/save_period
+verify:       # Export verification (export-only)
 ```
 
 ---
@@ -61,7 +62,15 @@ These keys are consumed exclusively by the frontend code and never forwarded to 
 
 > **Important**: `model.line_width` is passed to the ultralytics backend (`predict()`), while `visualization.box_thickness` is used by the **frontend** `draw_detections()` function. Do not confuse the two.
 
-### Train / Val / Export
+### Export
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `verify.enabled` | `bool` | Verify model after export |
+| `verify.source` | `str` | Test image for verification |
+| `output.path` | `str` | Custom output path for exported model |
+
+### Train / Val
 
 Most keys in `train/`, `validation/`, `export/`, `augmentation/`, and `model/` are **directly forwarded** to ultralytics. The frontend mainly acts as a config parser and wrapper.
 
@@ -85,7 +94,7 @@ The following keys are extracted from config and passed directly to ultralytics 
 
 All keys under `model.*` (except `model.path` which is used to load the model) are passed as kwargs to `model.predict()` via `core.engine.YOLOInference._predict_kwargs()`.
 
-Examples: `imgsz`, `conf`, `iou`, `max_det`, `agnostic_nms`, `classes`, `stream`, `half`, `augment`, `vid_stride`, `retina_masks`, `visualize`, `embed`, `int8`, `save_conf`, `save_frames`, `stream_buffer`, `dnn`, `end2end`, `line_width`, `show`, `kpt_thres`, `topk`.
+Examples: `imgsz`, `conf`, `iou`, `max_det`, `agnostic_nms`, `classes`, `stream`, `half`, `augment`, `vid_stride`, `retina_masks`, `visualize`, `embed`, `int8`, `save_conf`, `save_frames`, `stream_buffer`, `dnn`, `end2end`, `line_width`, `show`, `show_boxes`, `kpt_thres`, `topk`.
 
 ### Train passthrough
 
@@ -93,11 +102,11 @@ All keys under `train.*`, `augmentation.*`, `validation.*`, `output.*`, plus `mo
 
 ### Val passthrough
 
-All keys under `validation.*`, `model.*` (imgsz, batch, device, classes, task), `data.*`, and `output.*` are forwarded to `model.val()`.
+All keys under `validation.*` (including `save_txt`, `save_crop`, `show`, `show_labels`, `show_conf`, `show_boxes`, `line_width`, `retina_masks`, `visualize`, `workers`, `cache`), `model.*` (imgsz, batch, device, classes, task), `data.*`, and `output.*` are forwarded to `model.val()`.
 
 ### Export passthrough
 
-All keys under `export.*`, `model.*` (format, imgsz, batch, device), `output.verbose`, and `verify.*` are forwarded to `model.export()`.
+All keys under `export.*` (including NMS params `conf`, `iou`, `max_det`, `agnostic_nms` for when `nms=True`), `model.*` (format, imgsz, batch, device), `output.verbose`, and `verify.*` are forwarded to `model.export()`.
 
 ---
 
@@ -155,6 +164,22 @@ Never delete a CLI argument from the config dict just because it matches a hardc
 
 Use `utils.config.set_boolean_argument(parser, "flag", "flag")` to generate `--flag` / `--no-flag` pairs. This yields `None` when omitted, allowing YAML defaults to take effect. Avoid `type=str, choices=["true", "false"]` for booleans.
 
+### 7. Task-specific parameters in YAML examples
+
+Train example configs include ALL通用参数 + 该任务专用参数. Non-applicable task params (e.g. `dropout` for detect, `overlap_mask` for pose) are omitted to avoid confusion. Each task example only includes its own task-specific loss gains:
+
+| Task | Task-specific train params |
+|------|---------------------------|
+| detect | (none beyond common) |
+| segment | `overlap_mask`, `mask_ratio`, `copy_paste`, `copy_paste_mode` |
+| classify | `dropout`, `auto_augment`, `erasing` |
+| pose | `pose`, `kobj`, `rle` |
+| obb | `angle` |
+
+### 8. Validation section in train configs
+
+The `validation` section in train configs now includes `save_conf`, `int8`, and `end2end` — these are passed to `model.train()` which forwards them to the internal validation loop.
+
 ---
 
 ## File Responsibilities
@@ -187,3 +212,119 @@ Key frontend sections mapping to backend args:
 - `augmentation.*` -> `model.train()` kwargs (augmentation hyperparameters)
 - `export.*` -> `model.export()` kwargs
 - `model.*` -> varies by command (predict/val/train/export all read model settings)
+
+---
+
+## Config Directory Layout
+
+```
+configs/
+├── datasets/                          # Dataset definitions
+│   └── example/                       # Example dataset configs (detect/classify/segment/pose/obb)
+├── train/
+│   ├── example/                       # Task-specific training examples
+│   │   ├── detect_example.yaml        # Uses datasets/example/detect_example.yaml
+│   │   ├── classify_example.yaml      # mosaic: 0.0, imgsz: 224, has dropout/auto_augment/erasing
+│   │   ├── segment_example.yaml       # Has overlap_mask/mask_ratio/copy_paste/copy_paste_mode
+│   │   ├── pose_example.yaml          # Has pose/kobj/rle loss gains, degrees: 5.0
+│   │   ├── obb_example.yaml           # Has angle loss gain, imgsz: 1024
+│   │   └── track_example.yaml         # Uses detect model, references detect dataset
+│   └── *.yaml                         # User-specific training configs
+├── predict/
+│   ├── example/                       # Task-specific predict examples
+│   │   ├── detect_example.yaml        # Standard NMS params
+│   │   ├── classify_example.yaml      # topk: 5, show_boxes: false, no NMS iou/conf
+│   │   ├── segment_example.yaml       # retina_masks: false
+│   │   ├── pose_example.yaml          # kpt_thres: 0.5, skeleton/kpt_names
+│   │   └── obb_example.yaml           # Standard NMS params
+│   └── *.yaml                         # User-specific predict configs
+├── validate/
+│   └── example/                       # Uses built-in ultralytics datasets (coco8, coco8-seg, etc.)
+│       ├── detect_example.yaml        # data.config: coco8.yaml
+│       ├── classify_example.yaml      # data.config: imagenet100
+│       ├── segment_example.yaml       # data.config: coco8-seg.yaml
+│       ├── pose_example.yaml          # data.config: coco8-pose.yaml
+│       └── obb_example.yaml           # data.config: dota.yaml
+└── export/
+    └── example/
+        ├── onnx/                      # {detect,classify,segment,pose,obb}_example.yaml
+        ├── engine/                    # TensorRT exports
+        ├── torchscript/               # TorchScript exports
+        └── openvino/                  # OpenVINO exports
+```
+
+### Example Config Conventions
+
+- **Train examples**: Use `configs/datasets/example/<task>_example.yaml` for data. Include all common params + task-specific params only. Model names use `yolo26n[-suffix].pt` pattern.
+- **Predict examples**: Use `datasets/test/images` as generic input path. Task-specific sections only (e.g. classify has `topk`, segment has `retina_masks`, pose has `kpt_thres` + `skeleton`).
+- **Validate examples**: Use built-in ultralytics dataset names (`coco8.yaml`, `coco8-seg.yaml`, etc.) since validation just needs a working dataset. Model paths point to `runs/<task>/train/weights/best.pt`.
+- **Export examples**: All have `nms: false` by default. Model paths point to trained weights. Format-specific params (opset, half, simplify, etc.) vary by export target.
+
+---
+
+## Ultralytics Submodule Policy
+
+**禁止修改 `ultralytics/` 文件夹**，它是官方 git 子模块 (v8.4.46)。尽量使用原本的实现，原本的作为后端，项目只做前端封装。
+
+- 优先使用 ultralytics 原有功能，只在前端做封装调用
+- 确实需要修改时，在项目根目录创建对应结构的文件，例如需要改 `ultralytics/utils/downloads.py`，则创建 `utils/downloads.py`，然后修改导入路径
+- 现有的 `utils/downloads.py` 就是这个模式，用于将模型下载路径重定向到项目的 weights 目录
+
+---
+
+## Frontend Callback Mechanism
+
+### Per-Epoch Val Visualization During Training
+
+By default, ultralytics only generates val visualization plots (`val_batch*_labels.jpg`, `val_batch*_pred.jpg`, confusion matrix) on the **final epoch** or when early stopping is imminent (see `ultralytics/engine/validator.py:163`).
+
+To make these plots available every epoch, the frontend uses **two callbacks** registered via `model.add_callback()` in `commands/train.py` — no ultralytics backend modification needed:
+
+1. **`on_train_start`** → After trainer setup (when `trainer.validator` exists), registers a nested `on_val_start` callback on the validator. This inner callback forces `validator.args.plots = True` during training, overriding the backend's `self.args.plots &= ...` suppression at line 163.
+
+2. **`on_fit_epoch_end`** → For non-final epochs, launches an async `threading.Thread` to call `trainer.plot_metrics()` (generates `results.png` training curves). Non-blocking; skips if previous thread is still running. Final epoch is left to the backend's native handling.
+
+**Key design decisions:**
+- Callbacks are registered on the `Model` object before `model.train()` — ultralytics propagates them to the trainer
+- `on_val_start` must be registered on `trainer.validator` (not the model) because the validator creates its own callback dict
+- `on_train_start` runs after `_setup_train()` where `self.validator` is assigned, so it's safe to access
+- Plot generation is purely CPU-bound (matplotlib) so running in a daemon thread doesn't interfere with GPU training
+
+**File:** `commands/train.py` — `_make_val_plot_callback()`
+
+---
+
+## Known Fixed Issues (Code Quality Audit 2026-05-04)
+
+The following bugs were identified and fixed during the comprehensive audit:
+
+### Bug Fixes
+
+| File | Issue | Fix |
+|------|-------|-----|
+| `core/engine.py` | `retina_masks` only passed to backend when truthy — user couldn't set `false` | Always pass `retina_masks` unconditionally |
+| `configs/train/example/detect_example.yaml` | Dataset ref pointed to user-specific `chaoyuan.yaml` | Changed to `configs/datasets/example/detect_example.yaml` |
+| `configs/train/example/classify_example.yaml` | Had segment-specific `copy_paste`/`copy_paste_mode` params; `mosaic: 1.0` despite classify needing `0.0` | Removed segment params, set `mosaic: 0.0` |
+| `configs/predict/example/classify_example.yaml` | `show_boxes: true` — classify has no bounding boxes | Set `show_boxes: false` |
+
+### Previously Fixed (Earlier Sessions)
+
+| File | Issue |
+|------|-------|
+| `commands/val.py` | Missing parameter pass-through to backend (optional params not forwarded) |
+| `commands/export.py` | Verbose flag bug during conversion; missing NMS params |
+| `commands/predict.py` | Verbose config overwrite bug; missing `show_boxes` parameter |
+| `configs/train/example/classify_example.yaml` | Was empty — complete rewrite with classify-specific params |
+| `configs/train/example/segment_example.yaml` | Corrupted header — fixed |
+| `configs/train/example/obb_example.yaml` | Corrupted output section — fixed |
+| `configs/train/example/pose_example.yaml` | Truncated output section — fixed |
+
+### Infrastructure
+
+| File | Change |
+|------|--------|
+| `run_train.sh` | Populated (was empty stub) — follows `run_export.sh` pattern, default: `configs/train/example/detect_example.yaml` |
+| `run_predict.sh` | Populated (was empty stub) — default: `configs/predict/example/detect_example.yaml` |
+| `run_val.sh` | Populated (was empty stub) — default: `configs/validate/example/detect_example.yaml` |
+
+All 3 shell scripts support `--config/-c` for custom config, with fallback to default then CLI-only mode.

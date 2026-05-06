@@ -5,6 +5,9 @@ from pathlib import Path
 from collections import Counter, defaultdict
 import numpy as np
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from utils.io import read_text_robust
+
 def parse_args():
     import argparse
     p = argparse.ArgumentParser()
@@ -49,7 +52,7 @@ def analyze_split(root: Path, split: str, names: list):
     cooccurrence = Counter()
 
     for lf in label_files:
-        lines = lf.read_text().strip().splitlines()
+        lines = read_text_robust(lf).strip().splitlines()
         n = len(lines)
         objs_per_image.append(n)
         total_objects += n
@@ -57,12 +60,12 @@ def analyze_split(root: Path, split: str, names: list):
 
         for line in lines:
             parts = line.strip().split()
-            if len(parts) != 5:
-                quality_issues.append(f"{lf.name}: bad format: {line}")
+            if len(parts) < 5:
+                quality_issues.append(f"{lf.name}: bad format (<5 cols): {line}")
                 continue
             try:
                 cid = int(parts[0])
-                x, y, w, h = map(float, parts[1:])
+                x, y, w, h = map(float, parts[1:5])
             except ValueError:
                 quality_issues.append(f"{lf.name}: non-numeric: {line}")
                 continue

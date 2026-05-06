@@ -1,21 +1,24 @@
 #!/bin/bash
 #
 # YOLO Validation Shell Script
-# =============================
-# A convenient wrapper for running YOLO validation with various configurations.
+# ==============================
+# A convenient wrapper for validating YOLO models.
 #
 # Usage:
-#   ./run_val.sh                              # Validate with default config
-#   ./run_val.sh --data coco8.yaml            # Override dataset
 #   ./run_val.sh --config configs/validate/example/detect_example.yaml
+#   ./run_val.sh --config configs/validate/val.yaml --model best.pt
+#   ./run_val.sh                                          # Use default config
 #
 
 set -e
 
+# Script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-DEFAULT_CONFIG="${SCRIPT_DIR}/configs/validate/val.yaml"
+# Default config file
+DEFAULT_CONFIG="${SCRIPT_DIR}/configs/validate/example/detect_example.yaml"
 
+# Parse arguments
 CONFIG_FILE=""
 EXTRA_ARGS=()
 
@@ -32,28 +35,14 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Use default config if none specified
-if [ -z "$CONFIG_FILE" ]; then
-    if [ -f "$DEFAULT_CONFIG" ]; then
-        CONFIG_FILE="$DEFAULT_CONFIG"
-    fi
-fi
-
-if [ -n "$CONFIG_FILE" ] && [ ! -f "$CONFIG_FILE" ]; then
-    echo "Warning: Config file not found: $CONFIG_FILE"
-    echo "Using default settings (no --config)..."
-    CONFIG_FILE=""
-fi
-
-echo "=============================================="
-echo "YOLO Validation Script"
-echo "=============================================="
-echo "Config: ${CONFIG_FILE:-<none, using defaults>}"
-echo "Extra args: ${EXTRA_ARGS[*]}"
-echo "=============================================="
-
-if [ -z "$CONFIG_FILE" ]; then
-    python "${SCRIPT_DIR}/yolo.py" val "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"
+# Determine which config to use
+if [ -n "$CONFIG_FILE" ] && [ -f "$CONFIG_FILE" ]; then
+    echo "Using config: $CONFIG_FILE"
+    python "${SCRIPT_DIR}/yolo.py" val --config "$CONFIG_FILE" "${EXTRA_ARGS[@]}"
+elif [ -f "$DEFAULT_CONFIG" ]; then
+    echo "Using default config: $DEFAULT_CONFIG"
+    python "${SCRIPT_DIR}/yolo.py" val --config "$DEFAULT_CONFIG" "${EXTRA_ARGS[@]}"
 else
-    python "${SCRIPT_DIR}/yolo.py" val --config "$CONFIG_FILE" "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"
+    echo "No config file found. Using CLI arguments only."
+    python "${SCRIPT_DIR}/yolo.py" val "${EXTRA_ARGS[@]}"
 fi
