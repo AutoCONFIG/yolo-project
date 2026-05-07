@@ -1,6 +1,8 @@
 # YOLO Segmentation Inference Configuration
 # ======================================
 
+mode: predict
+
 model:
   path: runs/segment/train/weights/best.pt  # 模型路径 (.pt 权重 或 .onnx)
   imgsz: 640                                # 输入图像尺寸 (默认 640, 分类建议 224)
@@ -43,7 +45,7 @@ visualization:
   font_scale: 0.5                           # 标签字体比例 (前端可视化, 默认 0.5)
   show_labels: true                         # 显示类别标签 (前端可视化)
   show_conf: true                           # 显示置信度分数 (前端可视化)
-  mask_alpha: 0.4                           # 分割掩码叠加透明度 (默认 0.4)
+  mask_alpha: 0.4                           # 分割掩码叠加透明度 (默认 0.4, segment 任务专用)
 
 video:
   fps: null                                 # 输出视频帧率 (null=使用原视频帧率)

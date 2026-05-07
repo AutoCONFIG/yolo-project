@@ -110,6 +110,7 @@ Examples:
     # ── Quantization ──────────────────────────────────────────────────
     set_boolean_argument(parser, "int8", "int8", help_true="INT8 量化 (TensorRT/OpenVINO)", help_false="不使用 INT8")
     parser.add_argument("--data", type=str, default=None, help="INT8 校准数据集配置")
+    parser.add_argument("--split", type=str, default=None, help="校准数据集划分 (默认 val)")
     parser.add_argument("--fraction", type=float, default=None, help="INT8 校准数据集比例 (默认 1.0)")
     parser.add_argument("--workspace", type=float, default=None, help="TensorRT 工作区大小 (GB, 默认 4)")
 
@@ -145,7 +146,7 @@ def args_to_config(args: argparse.Namespace) -> Dict[str, Any]:
 
     # ── Export options ──
     export_plain = (
-        "opset", "data", "fraction", "workspace",
+        "opset", "data", "split", "fraction", "workspace",
         "conf", "iou", "max_det",
     )
     export_bool = (
@@ -258,6 +259,7 @@ def export(config: Dict):
     int8 = get_nested_value(config, "export", "int8", default=False)
     data = get_nested_value(config, "export", "data")
     fraction = get_nested_value(config, "export", "fraction")
+    split = get_nested_value(config, "export", "split")
     workspace = get_nested_value(config, "export", "workspace")
     keras = get_nested_value(config, "export", "keras")
 
@@ -344,6 +346,8 @@ def export(config: Dict):
         export_args["data"] = data
     if fraction is not None:
         export_args["fraction"] = fraction
+    if split is not None:
+        export_args["split"] = split
     if workspace is not None and fmt == "engine":
         export_args["workspace"] = workspace
     if keras is not None and fmt == "saved_model":

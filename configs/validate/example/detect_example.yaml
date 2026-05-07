@@ -2,6 +2,8 @@
 # =================================================
 # 目标检测验证配置示例
 
+mode: val
+
 model:
   name: runs/detect/train/weights/best.pt  # 模型路径 (.pt 权重 或 .onnx)
   task: null                               # 任务类型: null=自动, detect/segment/classify/pose/obb

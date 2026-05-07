@@ -2,6 +2,8 @@
 # ================================
 # Rotated bounding box detection training config example
 
+mode: train
+
 model:
   name: yolo26n-obb.pt                               # 模型路径或名称 (如 yolo26n-obb.pt)
   pretrained: true                                   # 预训练权重: false=从头训练, true=默认权重, 路径=指定权重

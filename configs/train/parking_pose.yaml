@@ -2,6 +2,8 @@
 # =================================================
 # 停车位关键点检测训练配置 - YOLO26n-pose
 
+mode: train
+
 model:
   name: yolo26n-pose.yaml                     # 模型路径或名称 (如 yolo26n.pt)
   pretrained: false                           # 预训练权重: false=从头训练, true=默认权重, 路径=指定权重

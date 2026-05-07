@@ -2,6 +2,8 @@
 # =======================================================
 # 图像分类验证配置示例
 
+mode: val
+
 model:
   name: runs/classify/train/weights/best.pt  # 模型路径 (.pt 权重 或 .onnx)
   task: null                                 # 任务类型: null=自动, detect/segment/classify/pose/obb
@@ -28,7 +30,7 @@ validation:
   dnn: false                                 # 使用 OpenCV DNN 进行 ONNX 推理验证
   agnostic_nms: false                        # 类别无关 NMS (不同类别框也做 NMS)
   augment: false                             # 测试时增强 TTA (慢但可能提升精度)
-  rect: true                                 # 矩形验证 (减少 padding, 加速但可能略降精度)
+  rect: false                               # 矩形验证 (减少 padding, 加速但可能略降精度)
   int8: false                                # INT8 量化推理验证
   end2end: null                              # 端到端检测头 (YOLO26/YOLOv10, 免 NMS)
   fraction: 1.0                              # 使用数据集比例 (1.0=全部, 0.1=10% 子集)

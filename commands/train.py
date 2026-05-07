@@ -503,7 +503,16 @@ def train(config: Dict):
     project = train_args.get("project")
     name = train_args.get("name")
 
-    project_root = PROJECT_ROOT / "runs" / (task or "detect")
+    task_for_dir = task
+    if task_for_dir is None:
+        try:
+            from ultralytics import YOLO as _YOLO
+            _tmp = _YOLO(model_name)
+            task_for_dir = getattr(_tmp, "task", "detect")
+        except Exception:
+            task_for_dir = "detect"
+
+    project_root = PROJECT_ROOT / "runs" / task_for_dir
     if not name:
         name = "train"
         train_args["name"] = name

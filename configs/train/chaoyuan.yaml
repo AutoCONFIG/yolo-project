@@ -25,6 +25,8 @@
 #   关闭HSV色调/饱和度 — 灰度图无效通道
 #   SGD优化器 — 不用AdamW (容易不稳定)
 
+mode: train
+
 model:
   name: yolo26s-p2.yaml                       # P2/4 + P3/8 + P4/16 + P5/32 四头检测, 小目标特征翻倍
   pretrained: false                            # False=从头训练, True/路径=加载权重

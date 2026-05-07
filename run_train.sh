@@ -38,11 +38,11 @@ done
 # Determine which config to use
 if [ -n "$CONFIG_FILE" ] && [ -f "$CONFIG_FILE" ]; then
     echo "Using config: $CONFIG_FILE"
-    python "${SCRIPT_DIR}/yolo.py" train --config "$CONFIG_FILE" "${EXTRA_ARGS[@]}"
+    python "${SCRIPT_DIR}/yolo.py" --config "$CONFIG_FILE" "${EXTRA_ARGS[@]}"
 elif [ -f "$DEFAULT_CONFIG" ]; then
     echo "Using default config: $DEFAULT_CONFIG"
-    python "${SCRIPT_DIR}/yolo.py" train --config "$DEFAULT_CONFIG" "${EXTRA_ARGS[@]}"
+    python "${SCRIPT_DIR}/yolo.py" --config "$DEFAULT_CONFIG" "${EXTRA_ARGS[@]}"
 else
     echo "No config file found. Using CLI arguments only."
-    python "${SCRIPT_DIR}/yolo.py" train "${EXTRA_ARGS[@]}"
+    python "${SCRIPT_DIR}/yolo.py" "${EXTRA_ARGS[@]}"
 fi

@@ -2,6 +2,8 @@
 # ===========================================
 # Image classification training config example
 
+mode: train
+
 model:
   name: yolo26n-cls.pt                                    # 模型路径或名称 (如 yolo26n-cls.pt)
   pretrained: true                                        # 预训练权重: false=从头训练, true=默认权重, 路径=指定权重
@@ -43,8 +45,7 @@ train:
   warmup_bias_lr: 0.1                                     # 预热偏置学习率 (默认 0.1)
   cls: 0.5                                                # 分类损失增益 (默认 0.5)
   cls_pw: 0.0                                             # 类别权重幂次 (处理类别不平衡, 0=关闭)
-  box: null                                               # 边界框损失增益 (分类任务不使用, 默认 7.5)
-  dfl: null                                               # 分布焦点损失增益 (分类任务不使用, 默认 1.5)
+                                                          # box/dfl: 分类任务不使用, 不设置则后端自动忽略
   close_mosaic: 10                                        # 最后 N 轮关闭 Mosaic 增强 (默认 10, 0=不关闭)
   seed: 0                                                 # 随机种子 (默认 0, 用于结果可复现)
   deterministic: true                                     # 确定性操作 (保证可复现, 可能略慢)
@@ -81,6 +82,7 @@ validation:
   augment: false                                          # 测试时增强 TTA (慢但可能提升精度)
   save_conf: false                                        # 在 txt 标签中保存置信度分数
   int8: false                                             # INT8 量化推理验证
+  topk: 5                                                 # 分类 Top-K (classify 任务专用, 默认 5)
   end2end:                                                # 端到端检测头 (YOLO26/YOLOv10, 免 NMS)
 
 output:

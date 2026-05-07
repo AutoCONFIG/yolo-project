@@ -2,6 +2,8 @@
 # ===========================================
 # Instance segmentation training config example
 
+mode: train
+
 model:
   name: yolo26n-seg.pt                                   # 模型路径或名称 (如 yolo26n-seg.pt)
   pretrained: true                                       # 预训练权重: false=从头训练, true=默认权重, 路径=指定权重
@@ -48,7 +50,7 @@ train:
   close_mosaic: 10                                       # 最后 N 轮关闭 Mosaic 增强 (默认 10, 0=不关闭)
   seed: 0                                                # 随机种子 (默认 0, 用于结果可复现)
   deterministic: true                                    # 确定性操作 (保证可复现, 可能略慢)
-  overlap_mask: true                                     # 训练时合并实例掩码 (segment 任务专用)
+  overlap_mask: true                                     # 训练时合并实例掩码 (segment 任务专用, 默认 true)
   mask_ratio: 4                                          # 掩码下采样比 (segment 任务专用, 默认 4)
 
 augmentation:
@@ -67,7 +69,7 @@ augmentation:
   mixup: 0.0                                             # MixUp 增强概率 (默认 0.0)
   cutmix: 0.0                                            # CutMix 增强概率 (默认 0.0)
   copy_paste: 0.0                                        # 复制粘贴增强概率 (segment 任务专用, 默认 0.0)
-  copy_paste_mode: flip                                  # 复制粘贴策略 (flip/mixup, segment 任务专用)
+  copy_paste_mode: flip                                  # 复制粘贴策略 (flip/mixup, segment 任务专用, 默认 flip)
 
 validation:
   val: true                                              # 训练期间是否运行验证
@@ -82,6 +84,7 @@ validation:
   augment: false                                         # 测试时增强 TTA (慢但可能提升精度)
   save_conf: false                                       # 在 txt 标签中保存置信度分数
   int8: false                                            # INT8 量化推理验证
+  retina_masks: false                                    # 高分辨率分割掩码 (segment 任务专用, 默认 false)
   end2end:                                               # 端到端检测头 (YOLO26/YOLOv10, 免 NMS)
 
 output:

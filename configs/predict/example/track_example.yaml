@@ -3,6 +3,8 @@
 # 目标检测+跟踪推理配置示例
 # 注意: 跟踪 (track) 使用 detect 模型，通过 tracker 配置启用跟踪功能
 
+mode: track
+
 model:
   path: runs/detect/train/weights/best.pt   # 模型路径 (.pt 权重 或 .onnx)
   imgsz: 640                                # 输入图像尺寸 (默认 640, 分类建议 224)
@@ -24,9 +26,10 @@ model:
   half: false                               # FP16 半精度推理 (需 GPU 支持)
   end2end:                                  # 端到端检测头 (YOLO26/YOLOv10, 免 NMS)
   classes: null                             # 类别过滤 (null=全部, [0,1]=只保留指定类别)
+  persist: false                            # 跨调用持久化跟踪器 (true=多视频共享ID, false=每视频重置)
 
 io:
-  input: datasets/test/video.mp4            # 输入路径 (视频/目录/URL/摄像头编号)
+  input: datasets/test/video.mp4            # 输入路径 (图片/目录/视频/URL/摄像头编号)
   output: runs/inference/track              # 输出目录路径
   save_vis: true                            # 保存可视化结果图片/视频
   save_json: false                          # 保存推理结果为 JSON 格式

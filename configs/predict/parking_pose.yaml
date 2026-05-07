@@ -2,6 +2,8 @@
 # =============================
 # 适用任务: pose (关键点检测)
 
+mode: predict
+
 model:
   path: /media/yun/de2a43ce-446c-4a62-99b3-8ddc6ea1ef87/yolo-project/runs/parking_spot/weights/best.pt  # 模型路径 (.pt 权重 或 .onnx)
   imgsz: 640                                       # 输入图像尺寸 (默认 640, 分类建议 224)

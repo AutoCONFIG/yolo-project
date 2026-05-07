@@ -1,6 +1,8 @@
 # ONNX OBB Export Configuration
 # =============================
 
+mode: export
+
 model:
   path: runs/obb/train/weights/best.pt  # 模型路径 (.pt 权重 或 .onnx)
   format: onnx                          # 导出格式: onnx/torchscript/openvino/engine 等

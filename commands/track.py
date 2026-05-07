@@ -22,13 +22,13 @@ import cv2
 import numpy as np
 
 from core import (
+    YOLOInference,
+    draw_detections,
     get_video_files,
     is_video_file,
+    parse_pytorch_result,
+    NMSConfig,
 )
-from core.engine import YOLOInference
-from core.parser import parse_pytorch_result
-from core.types import NMSConfig
-from core.visualization import draw_detections
 from utils.config import (
     config_from_args,
     get_nested_value,
@@ -39,7 +39,7 @@ from utils.config import (
     setup_ultralytics_path,
     to_bool,
 )
-from utils.constants import DEFAULT_IMGSZ
+from utils.constants import DEFAULT_IMGSZ, DEFAULT_MASK_ALPHA, DEFAULT_KPT_RADIUS, DEFAULT_KPT_LINE
 
 setup_ultralytics_path()
 
@@ -364,10 +364,27 @@ def _track_video(
                     font_scale=vis_cfg.get("font_scale", 0.5) if vis_cfg else 0.5,
                     show_labels=vis_cfg.get("show_labels", True) if vis_cfg else True,
                     show_conf=vis_cfg.get("show_conf", True) if vis_cfg else True,
+                    mask_alpha=vis_cfg.get("mask_alpha", DEFAULT_MASK_ALPHA) if vis_cfg else DEFAULT_MASK_ALPHA,
+                    kpt_radius=vis_cfg.get("kpt_radius", DEFAULT_KPT_RADIUS) if vis_cfg else DEFAULT_KPT_RADIUS,
+                    kpt_line=vis_cfg.get("kpt_line", DEFAULT_KPT_LINE) if vis_cfg else DEFAULT_KPT_LINE,
+                    line_width=vis_cfg.get("line_width") if vis_cfg else None,
                     skeleton=skeleton, kpt_names=kpt_names,
                 )
                 if writer:
                     writer.write(vis)
+
+            if save_crop and image_result.detections:
+                crop_dir = output_path / "crops" / input_path.stem
+                crop_dir.mkdir(parents=True, exist_ok=True)
+                for j, det in enumerate(image_result.detections):
+                    x1, y1, x2, y2 = [int(v) for v in det.bbox]
+                    x1, y1 = max(0, x1), max(0, y1)
+                    x2, y2 = min(frame.shape[1], x2), min(frame.shape[0], y2)
+                    if x2 <= x1 or y2 <= y1:
+                        continue
+                    crop = frame[y1:y2, x1:x2]
+                    crop_path = crop_dir / f"frame{frame_idx}_{det.class_name}_{j}.jpg"
+                    cv2.imwrite(str(crop_path), crop)
 
             all_results.append(image_result)
 
@@ -378,6 +395,38 @@ def _track_video(
 
     if verbose:
         print(f"  完成: {frame_idx} 帧, {total_detections} 总检测")
+
+    if save_json:
+        import json as _json
+        json_path = output_path / f"{input_path.stem}_track_results.json"
+        json_path.parent.mkdir(parents=True, exist_ok=True)
+        json_data = {
+            "video": str(input_path),
+            "total_frames": frame_idx,
+            "total_detections": total_detections,
+            "results": [r.to_dict() for r in all_results],
+        }
+        with open(json_path, "w", encoding="utf-8") as f:
+            _json.dump(json_data, f, indent=2, ensure_ascii=False)
+        print(f"JSON 结果保存至: {json_path}")
+
+    if save_txt and all_results:
+        txt_dir = output_path / "labels"
+        txt_dir.mkdir(parents=True, exist_ok=True)
+        for r in all_results:
+            if not r.detections:
+                continue
+            frame_name = Path(r.image_path).stem if r.image_path else f"frame_{len(all_results)}"
+            txt_path = txt_dir / f"{frame_name}.txt"
+            img_h, img_w = r.image_shape
+            with open(txt_path, "w") as f:
+                for det in r.detections:
+                    x1, y1, x2, y2 = det.bbox
+                    cx = (x1 + x2) / 2 / img_w
+                    cy = (y1 + y2) / 2 / img_h
+                    w = (x2 - x1) / img_w
+                    h = (y2 - y1) / img_h
+                    f.write(f"{det.class_id} {cx:.6f} {cy:.6f} {w:.6f} {h:.6f} {det.confidence:.4f}\n")
 
     return all_results
 

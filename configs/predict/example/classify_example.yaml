@@ -1,6 +1,8 @@
 # YOLO Classification Inference Configuration
 # =========================================
 
+mode: predict
+
 model:
   path: runs/classify/train/weights/best.pt  # 模型路径 (.pt 权重 或 .onnx)
   imgsz: 224                                 # 输入图像尺寸 (默认 640, 分类建议 224)
@@ -16,7 +18,7 @@ model:
   save_frames: false                         # 保存视频推理的每一帧为图片
   stream_buffer: false                       # 流式缓冲所有帧 (true=缓冲, false=只保留最新帧)
   line_width:                                # 后端渲染线宽 (null=自动缩放)
-  show_boxes: false                          # 后端是否绘制检测框 (classify 无检测框, 设为 false)
+  show_boxes: false                          # 后端是否绘制检测框 (前端可视化开启时建议设为 false)
   embed: null                                # 特征嵌入层索引 (调试用, 默认 null)
   save_conf: false                           # 保存置信度到结果 (后端保存)
   half: false                                # FP16 半精度推理 (需 GPU 支持)
@@ -36,7 +38,7 @@ nms:
   conf: 0.25                                 # 置信度阈值 (默认 0.25)
   iou: 0.7                                   # NMS IoU 阈值 (默认 0.7, 越大保留越多框)
   max_det: 300                               # 每图最大检测数 (默认 300)
-  agnostic_nms: false                        # 类别无关 NMS (分类任务不适用)
+  agnostic_nms: false                        # 类别无关 NMS (不同类别框也做 NMS)
 
 visualization:
   box_thickness: 2                           # 边框线宽 (前端可视化, 默认 2)

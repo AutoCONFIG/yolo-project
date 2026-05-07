@@ -2,6 +2,8 @@
 # =============================
 # 模型验证/评估配置
 
+mode: val
+
 model:
   name: yolo26n.pt       # 模型路径 (.pt 权重 或 .onnx)
   task: null             # 任务类型: null=自动, detect/segment/classify/pose/obb

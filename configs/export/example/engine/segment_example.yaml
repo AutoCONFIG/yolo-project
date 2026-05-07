@@ -1,6 +1,8 @@
 # TensorRT Segmentation Export Configuration
 # ========================================
 
+mode: export
+
 model:
   path: runs/segment/train/weights/best.pt  # 模型路径 (.pt 权重 或 .onnx)
   format: engine                            # 导出格式: onnx/torchscript/openvino/engine 等

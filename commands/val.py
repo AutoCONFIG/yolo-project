@@ -128,6 +128,47 @@ Examples:
         "--source", type=str, default=None,
         help="验证数据源路径 (图片/目录/视频, 覆盖 data.config 的 val 划分)",
     )
+    parser.add_argument("--workers", type=int, default=None, help="数据加载线程数 (默认 8)")
+    parser.add_argument(
+        "--cache",
+        type=str,
+        default=None,
+        choices=["ram", "disk", "true", "false"],
+        help="缓存图像到内存或磁盘以加速验证 (true=ram, false=关闭)",
+    )
+    set_boolean_argument(
+        parser, "save_txt", "save-txt",
+        help_true="保存 txt 标签", help_false="不保存 txt 标签"
+    )
+    set_boolean_argument(
+        parser, "save_crop", "save-crop",
+        help_true="保存裁剪检测", help_false="不保存裁剪"
+    )
+    set_boolean_argument(
+        parser, "show", "show",
+        help_true="弹出窗口显示验证结果", help_false="不弹出窗口"
+    )
+    set_boolean_argument(
+        parser, "show_labels", "show-labels",
+        help_true="显示类别标签", help_false="不显示标签", neg_prefix="no-"
+    )
+    set_boolean_argument(
+        parser, "show_conf", "show-conf",
+        help_true="显示置信度", help_false="不显示置信度", neg_prefix="no-"
+    )
+    set_boolean_argument(
+        parser, "show_boxes", "show-boxes",
+        help_true="显示检测框", help_false="不显示检测框", neg_prefix="no-"
+    )
+    parser.add_argument("--line-width", type=int, default=None, help="线宽 (null=自动)")
+    set_boolean_argument(
+        parser, "retina_masks", "retina-masks",
+        help_true="高分辨率分割掩码 (segment 任务)", help_false="标准掩码"
+    )
+    set_boolean_argument(
+        parser, "visualize", "visualize",
+        help_true="可视化 TP/FP/FN", help_false="不可视化"
+    )
 
     # ── Output ────────────────────────────────────────────────────────
     parser.add_argument("--project", type=str, default=None, help="结果根目录的项目名")
@@ -165,9 +206,14 @@ def args_to_config(args: argparse.Namespace) -> Dict[str, Any]:
     val_cfg = config_from_args(
         args,
         boolean=("half", "plots", "save_json", "dnn", "agnostic_nms",
-                 "augment", "rect", "save_conf", "int8", "end2end"),
-        plain=("conf", "iou", "max_det", "fraction"),
+                 "augment", "rect", "save_conf", "int8", "end2end",
+                 "save_txt", "save_crop", "show", "show_labels", "show_conf",
+                 "show_boxes", "retina_masks", "visualize"),
+        plain=("conf", "iou", "max_det", "fraction", "line_width", "workers"),
     )
+    if "cache" in vars(args) and args.cache is not None:
+        cache_val = to_bool(args.cache)
+        val_cfg["cache"] = cache_val if cache_val is not None else args.cache
     if val_cfg:
         config["validation"] = {**config.get("validation", {}), **val_cfg}
 

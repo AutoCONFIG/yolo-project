@@ -47,6 +47,10 @@ def draw_dashed_line(
 def _get_keypoint_visibility(kpt_arr, idx):
     """判断关键点可见性级别。
 
+    同时支持两种输入格式:
+      - COCO 整数标签: v=0 不可见, v=1 遮挡, v=2 可见
+      - 模型浮点输出: v 为关键点置信度 (0.0-1.0), >=0.5 视为可见
+
     Returns:
         2 = 可见, 1 = 遮挡, 0 = 不可见
     """

@@ -1,6 +1,8 @@
 # YOLO Detection Inference Configuration
 # ====================================
 
+mode: predict
+
 model:
   path: runs/detect/train/weights/best.pt  # 模型路径 (.pt 权重 或 .onnx)
   imgsz: 640                               # 输入图像尺寸 (默认 640, 分类建议 224)

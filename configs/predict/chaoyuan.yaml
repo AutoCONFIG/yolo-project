@@ -2,6 +2,8 @@
 # =============================
 # 适用任务: detect (目标检测)
 
+mode: predict
+
 model:
   path: runs/detect/chaoyuan/train/weights/best.pt  # 模型路径 (.pt 权重 或 .onnx)
   imgsz: 1280                                       # 输入图像尺寸 (默认 640, 分类建议 224)
