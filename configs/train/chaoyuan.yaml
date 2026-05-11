@@ -31,6 +31,7 @@ model:
   name: yolo26s-p2.yaml                       # P2/4 + P3/8 + P4/16 + P5/32 四头检测, 小目标特征翻倍
   pretrained: false                            # False=从头训练, True/路径=加载权重
   task: detect                                 # detect/segment/classify/pose/obb
+  reg_max:                                     # DFL bins (默认由模型yaml决定, 如 yolo26=1, yolov8=16)
 
 data:
   config: configs/datasets/chaoyuan.yaml       # 数据集配置文件路径

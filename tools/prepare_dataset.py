@@ -77,8 +77,8 @@ logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
 
 # ========== 可修改的默认参数 ==========
-DEFAULT_SOURCE = "/home/yun/Desktop/20260430任务_1/ok"
-DEFAULT_OUTPUT = "/media/yun/de2a43ce-446c-4a62-99b3-8ddc6ea1ef87/datasets/ok"
+DEFAULT_SOURCE = None
+DEFAULT_OUTPUT = None
 DEFAULT_VAL_RATIO = 0.2
 DEFAULT_SEED = 42
 DEFAULT_EMPTY_RATIO = 0  # 负样本比例 (0=不提取, 0.1=10%)

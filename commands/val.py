@@ -211,7 +211,7 @@ def args_to_config(args: argparse.Namespace) -> Dict[str, Any]:
                  "show_boxes", "retina_masks", "visualize"),
         plain=("conf", "iou", "max_det", "fraction", "line_width", "workers"),
     )
-    if "cache" in vars(args) and args.cache is not None:
+    if args.cache is not None:
         cache_val = to_bool(args.cache)
         val_cfg["cache"] = cache_val if cache_val is not None else args.cache
     if val_cfg:

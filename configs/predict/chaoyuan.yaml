@@ -25,6 +25,7 @@ model:
   half: false                                       # FP16 半精度推理 (需 GPU 支持)
   end2end:                                          # 端到端检测头 (YOLO26/YOLOv10, 免 NMS)
   classes: null                                     # 类别过滤 (null=全部, [0,1]=只保留指定类别)
+  augment: false                                    # 测试时增强 TTA (慢但可能提升精度)
 
 io:
   input: /home/yun/Desktop/20260430任务_2            # 输入路径 (图片/目录/视频/URL/摄像头编号)
@@ -47,6 +48,7 @@ visualization:
   show_conf: true                                   # 显示置信度分数 (前端可视化)
 
 video:
+  fps: null                                         # 输出视频帧率 (null=使用原视频帧率)
   codec: mp4v                                       # 视频编码器 fourcc 码 (默认 mp4v)
 
 output:

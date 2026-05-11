@@ -170,6 +170,7 @@ def track(config: Dict) -> None:
     half = get_nested_value(config, "model", "half", default=False)
     augment = get_nested_value(config, "model", "augment", default=False)
     vid_stride = get_nested_value(config, "model", "vid_stride", default=1)
+    retina_masks = get_nested_value(config, "model", "retina_masks", default=False)
     visualize = get_nested_value(config, "model", "visualize", default=False)
     int8 = get_nested_value(config, "model", "int8", default=False)
     line_width = get_nested_value(config, "model", "line_width")
@@ -180,7 +181,6 @@ def track(config: Dict) -> None:
     end2end = get_nested_value(config, "model", "end2end")
     show = get_nested_value(config, "model", "show", default=False)
     show_boxes = get_nested_value(config, "model", "show_boxes")
-    retina_masks = get_nested_value(config, "model", "retina_masks", default=False)
     embed = get_nested_value(config, "model", "embed")
 
     input_path = get_nested_value(config, "io", "input")

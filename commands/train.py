@@ -18,6 +18,7 @@ Typical usage::
 
 import argparse
 import sys
+import tempfile
 import threading
 import traceback
 from pathlib import Path
@@ -38,7 +39,8 @@ from utils.constants import DEFAULT_IMGSZ
 
 setup_ultralytics_path()
 from ultralytics import YOLO
-from ultralytics.utils import LOGGER
+from ultralytics.nn.tasks import yaml_model_load
+from ultralytics.utils import LOGGER, YAML
 
 
 def _safe_wrap_plot_methods(validator):
@@ -152,6 +154,7 @@ Examples:
         default=None,
         help="任务类型",
     )
+    parser.add_argument("--reg-max", type=int, default=None, dest="reg_max", help="DFL reg_max bins (模型架构参数)")
     parser.add_argument("--classes", type=int, nargs="+", default=None, help="按类别 ID 过滤训练 (如 0 或 0 1 2)")
 
     # ── Data ──────────────────────────────────────────────────────────
@@ -321,7 +324,7 @@ def args_to_config(args: argparse.Namespace) -> Dict[str, Any]:
     # Model
     model_cfg = config_from_args(
         args,
-        plain=("model_yaml", "task", "classes"),
+        plain=("model_yaml", "task", "classes", "reg_max"),
         rename={"model_yaml": "yaml"},
     )
     if args.model:
@@ -410,6 +413,24 @@ def train(config: Dict):
     model_yaml = get_nested_value(config, "model", "yaml")
     pretrained = get_nested_value(config, "model", "pretrained")
     data_config = get_nested_value(config, "data", "config", default="coco8.yaml")
+
+    reg_max = get_nested_value(config, "model", "reg_max")
+    if reg_max is not None and (model_yaml or str(model_name).endswith((".yaml", ".yml"))):
+        yaml_src = model_yaml or model_name
+        try:
+            cfg_dict = yaml_model_load(yaml_src)
+            orig_reg_max = cfg_dict.get("reg_max", 16)
+            if orig_reg_max != reg_max:
+                cfg_dict["reg_max"] = reg_max
+                stem = Path(yaml_src).stem
+                tmp = Path(tempfile.gettempdir()) / f"{stem}_regmax{reg_max}.yaml"
+                YAML.save(tmp, cfg_dict)
+                LOGGER.info(f"Overriding reg_max={orig_reg_max} → {reg_max}, temp model yaml: {tmp}")
+                model_yaml = str(tmp)
+                if model_name == yaml_src:
+                    model_name = str(tmp)
+        except Exception as e:
+            LOGGER.warning(f"Failed to override reg_max in model yaml: {e}")
 
     train_args = {
         "data": data_config,

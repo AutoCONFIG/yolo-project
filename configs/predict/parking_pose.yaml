@@ -22,9 +22,10 @@ model:
   show_boxes: true                                 # 后端是否绘制检测框 (前端可视化开启时建议设为 false)
   embed: null                                      # 特征嵌入层索引 (调试用, 默认 null)
   save_conf: false                                 # 保存置信度到结果 (后端保存)
-  half: false                                      # FP16 半精度推理 (需 GPU 支持)
+  half: false                                       # FP16 半精度推理 (需 GPU 支持)
   end2end:                                         # 端到端检测头 (YOLO26/YOLOv10, 免 NMS)
   classes: [0]                                     # 类别过滤 (null=全部, [0,1]=只保留指定类别)
+  kpt_thres: 0.5                                   # 关键点置信度阈值 (pose 任务专用, 默认 0.5)
 
 io:
   input: /media/yun/706bc403-c76c-4fdd-8a3f-d954b6189048/实习/停车泊位昆明/  # 输入路径 (图片/目录/视频/URL/摄像头编号)
@@ -52,6 +53,7 @@ visualization:
     0: ["front_left", "front_right", "rear_right", "rear_left"]
 
 video:
+  fps: null                                        # 输出视频帧率 (null=使用原视频帧率)
   codec: mp4v                                      # 视频编码器 fourcc 码 (默认 mp4v)
 
 output:

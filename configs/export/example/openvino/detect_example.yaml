@@ -14,7 +14,6 @@ export:
   half: false                              # FP16 半精度导出 (加速推理, 可能略降精度)
   dynamic: false                           # 动态输入形状 (ONNX/OpenVINO/TensorRT 支持)
   simplify: true                           # 简化 ONNX 计算图 (默认 true, 推荐开启)
-  opset: null                              # ONNX opset 版本 (null=自动选择)
   nms: false                               # 在导出模型中嵌入 NMS (部分后端支持)
                                            # NMS 选项 (nms=True 时生效)
                                            # conf: 0.25            # NMS 置信度阈值 (nms=True 时生效, 默认 0.25)
