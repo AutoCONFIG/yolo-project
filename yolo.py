@@ -54,7 +54,7 @@ def main():
         print(f"Valid modes: {', '.join(MODES.keys())}")
         sys.exit(1)
 
-    sys.argv = ["yolo.py", mode] + sys.argv[1:]
+    sys.argv = ["yolo.py"] + sys.argv[1:]
     import importlib
     importlib.import_module(MODES[mode]).main()
 
