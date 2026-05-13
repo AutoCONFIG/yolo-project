@@ -53,8 +53,8 @@ def _safe_wrap_plot_methods(validator):
             def _safe(*args, **kwargs):
                 try:
                     return fn(*args, **kwargs)
-                except (ValueError, IndexError):
-                    pass
+                except (ValueError, IndexError) as e:
+                    LOGGER.warning(f"plot method {fn.__name__} failed: {type(e).__name__}: {e}")
             return _safe
 
         setattr(validator, attr, _make_safe(orig))
@@ -102,6 +102,64 @@ def _make_val_plot_callback(train_args: dict):
         t.start()
 
     return _on_train_start, _on_fit_epoch_end
+
+
+def _inject_ddp_val_plot_callbacks():
+    """Ensure val_batch plots work in DDP multi-GPU training.
+
+    DDP spawns subprocesses via generate_ddp_file() that don't inherit
+    model.add_callback() registrations.  This monkey-patches the DDP temp
+    file generator to inject the necessary val_batch plot callbacks directly
+    into the subprocess training script.
+    """
+
+    import ultralytics.utils.dist as _dist
+
+    _orig_gen_ddp_file = _dist.generate_ddp_file
+
+    _CALLBACK_CODE = """
+# --- Frontend: val_batch plot callbacks for DDP subprocess ---
+from ultralytics.utils import LOGGER as _ddp_logger
+
+def _ddp_force_plots(validator):
+    if validator.training:
+        validator.args.plots = True
+
+def _ddp_on_train_start(trainer):
+    trainer.validator.add_callback("on_val_start", _ddp_force_plots)
+    for _attr in ("plot_val_samples", "plot_predictions"):
+        _orig_fn = getattr(trainer.validator, _attr, None)
+        if _orig_fn is None:
+            continue
+        def _wrap(fn=_orig_fn):
+            def _safe(*a, **kw):
+                try:
+                    return fn(*a, **kw)
+                except (ValueError, IndexError) as e:
+                    _ddp_logger.warning(
+                        "plot method %s failed: %s: %s",
+                        fn.__name__, type(e).__name__, e,
+                    )
+            return _safe
+        setattr(trainer.validator, _attr, _wrap())
+
+trainer.add_callback("on_train_start", _ddp_on_train_start)
+# --- End Frontend injection ---
+"""
+
+    def _patched_gen_ddp_file(trainer):
+        path = _orig_gen_ddp_file(trainer)
+        with open(path) as f:
+            content = f.read()
+        content = content.replace(
+            "results = trainer.train()",
+            _CALLBACK_CODE + "\nresults = trainer.train()",
+        )
+        with open(path, "w") as f:
+            f.write(content)
+        return path
+
+    _dist.generate_ddp_file = _patched_gen_ddp_file
 
 
 # ─── Argument parser ─────────────────────────────────────────────────
@@ -575,6 +633,9 @@ def train(config: Dict):
             model = YOLO(model_name)
 
     plots = train_args.get("plots", True)
+    is_ddp = "," in str(train_args.get("device", ""))
+    if plots and is_ddp:
+        _inject_ddp_val_plot_callbacks()
     if plots:
         on_train_start, on_fit_epoch_end = _make_val_plot_callback(train_args)
         model.add_callback("on_train_start", on_train_start)
