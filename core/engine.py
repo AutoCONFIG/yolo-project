@@ -385,7 +385,11 @@ class YOLOInference:
 
     def inference_pytorch(self, image: np.ndarray) -> ImageResult:
         image_shape = image.shape[:2]
-        results = self.model.predict(image, **self.get_predict_kwargs())
+        kwargs = self.get_predict_kwargs()
+        stream = kwargs.get("stream", False)
+        results = self.model.predict(image, **kwargs)
+        if stream:
+            results = list(results)
         if results and len(results) > 0:
             result = parse_pytorch_result(results[0], self.classes, image_shape)
         else:
@@ -425,7 +429,11 @@ class YOLOInference:
         return result
 
     def inference_batch_pytorch(self, images: List[np.ndarray]) -> List[ImageResult]:
-        results = self.model.predict(images, **self.get_predict_kwargs())
+        kwargs = self.get_predict_kwargs()
+        stream = kwargs.get("stream", False)
+        results = self.model.predict(images, **kwargs)
+        if stream:
+            results = list(results)
         all_results = []
         for idx, result in enumerate(results):
             image_shape = images[idx].shape[:2]

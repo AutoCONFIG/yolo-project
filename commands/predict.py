@@ -341,7 +341,9 @@ def predict(config: Dict) -> None:
     print(f"设备: {device}")
     print(f"图像尺寸: {imgsz}")
     print(f"批大小: {batch_size}")
-    print(f"NMS: conf={nms_config.conf_threshold}, iou={nms_config.iou_threshold}, max_det={nms_config.max_detections}")
+    print(f"NMS: conf={nms_config.conf_threshold}, iou={nms_config.iou_threshold}, max_det={nms_config.max_detections}, agnostic={nms_config.agnostic}")
+    print(f"增强: augment={augment}, half={half}, stream={stream}")
+    print(f"类别过滤: {classes_filter}")
     print(f"{'='*60}\n")
 
     engine = YOLOInference(
