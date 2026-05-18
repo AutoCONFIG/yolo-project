@@ -3,3 +3,4 @@ runs/
 weights/
 __pycache__/
 .vscode/
+AGENTS.md
