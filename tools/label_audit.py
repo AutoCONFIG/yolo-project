@@ -50,55 +50,6 @@ COLOR_TEXT_BG = (30, 30, 30)
 COLOR_WHITE = (255, 255, 255)
 
 # ---------------------------------------------------------------------------
-# 用户默认配置
-#
-# 这个旧配置块保留兼容；下方“实际生效的默认配置和调参说明”会覆盖这里。
-# 日常修改请优先改下方中文说明更完整的配置块。
-# ---------------------------------------------------------------------------
-
-DEFAULT_MODELS = [r"D:\best.pt"]
-DEFAULT_DATA = r"D:\新建文件夹"
-DEFAULT_OUTPUT = r"D:\label_audit_result"
-DEFAULT_EXTRACT_DIR = r"D:\label_audit_extract"
-
-# None 表示扫描所有自动识别到的 split/文件夹。
-# 标准 YAML 数据集可使用 ["train"]、["val"] 或 ["train", "val"]。
-DEFAULT_SPLITS = None
-
-# 稳健性设置。单模型时，翻转 TTA 会提供“原图”和“翻转图”两个预测来源；
-# min_support=2 表示只保留两个来源都支持的候选。
-DEFAULT_TTA_FLIP = True
-DEFAULT_MIN_SUPPORT = 2
-DEFAULT_CONSENSUS_IOU = 0.60
-
-# 模型预测阈值。
-DEFAULT_IMGSZ = 1280
-DEFAULT_DEVICE = "auto"
-DEFAULT_CONF = 0.25
-DEFAULT_NMS_IOU = 0.70
-DEFAULT_MAX_DET = 300
-
-# 标注审计阈值。
-DEFAULT_MISSING_CONF = 0.75
-DEFAULT_MISSING_IOU = 0.30
-DEFAULT_SHIFT_CONF = 0.50
-DEFAULT_SHIFT_MIN_IOU = 0.10
-DEFAULT_GOOD_IOU = 0.60
-DEFAULT_UNMATCHED_GT_IOU = 0.30
-DEFAULT_DUPLICATE_IOU = 0.85
-DEFAULT_MIN_AREA = 1e-6
-
-# 提取设置。DEFAULT_EXTRACT_ISSUES 为 None 表示提取所有问题类型；
-# 也可以只列出需要提取的问题类型，例如：
-# ["possible_missing_label", "possible_box_shift"]
-DEFAULT_EXTRACT_ISSUES = None
-DEFAULT_EXTRACT_MAX_PRIORITY = 3
-DEFAULT_VIS_LIMIT = 1000
-DEFAULT_SAVE_VIS = True
-DEFAULT_KEEP_CLEAN_VIS = False
-DEFAULT_CLASS_AGNOSTIC = False
-
-# ---------------------------------------------------------------------------
 # 实际生效的默认配置和调参说明
 #
 # 上面的配置块仅保留兼容。日常使用时主要修改这一块；
@@ -107,19 +58,19 @@ DEFAULT_CLASS_AGNOSTIC = False
 
 # 已训练好的权重路径。可以添加多个权重做多模型/多 checkpoint 投票，例如：
 # [r"D:\best.pt", r"D:\last.pt"]。模型越多越慢，但候选会更稳。
-DEFAULT_MODELS = [r"D:\best.pt"]
+DEFAULT_MODELS = ["runs/detect/chaoyuan/train_20260512_base_p2/weights/best_241.pt"]
 
 # 数据集根目录或数据集 YAML。
 # 这里用 Unicode 转义是为了避免 Windows 终端/编辑器编码问题；
 # 运行时实际路径就是：D:\新建文件夹。
-DEFAULT_DATA = "D:\新建文件夹"
+DEFAULT_DATA = r"/media/yun/706bc403-c76c-4fdd-8a3f-d954b6189048/新建文件夹/"
 
 # 主审计输出目录：保存 issues.csv、review_lists/*.csv、summary.json 和可视化图。
-DEFAULT_OUTPUT = r"D:\label_audit_result"
+DEFAULT_OUTPUT = r"/media/yun/706bc403-c76c-4fdd-8a3f-d954b6189048/label_audit_result"
 
 # 提取出来给人工复核的数据目录。会保留原始相对子路径：
 # extract\labels\0105...\x.txt 修好后可按相同路径覆盖回原始数据。
-DEFAULT_EXTRACT_DIR = r"D:\label_audit_extract"
+DEFAULT_EXTRACT_DIR = r"/media/yun/706bc403-c76c-4fdd-8a3f-d954b6189048/label_audit_extract"
 
 # None 表示扫描自动识别到的所有目录/split。
 # 如果是标准 YAML 数据集，可以改成 ["train"]、["val"] 或 ["train", "val"]。

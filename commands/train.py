@@ -473,22 +473,36 @@ def train(config: Dict):
     data_config = get_nested_value(config, "data", "config", default="coco8.yaml")
 
     reg_max = get_nested_value(config, "model", "reg_max")
-    if reg_max is not None and (model_yaml or str(model_name).endswith((".yaml", ".yml"))):
+    end2end_val = resolve_config_value(config, ("train", "end2end"), ("validation", "end2end"))
+    if (reg_max is not None or end2end_val is not None) and (model_yaml or str(model_name).endswith((".yaml", ".yml"))):
         yaml_src = model_yaml or model_name
         try:
             cfg_dict = yaml_model_load(yaml_src)
-            orig_reg_max = cfg_dict.get("reg_max", 16)
-            if orig_reg_max != reg_max:
+            changed = False
+            suffix_parts = []
+            if reg_max is not None and cfg_dict.get("reg_max", 16) != reg_max:
+                orig_reg_max = cfg_dict.get("reg_max", 16)
                 cfg_dict["reg_max"] = reg_max
+                changed = True
+                suffix_parts.append(f"regmax{reg_max}")
+                LOGGER.info(f"Overriding reg_max={orig_reg_max} → {reg_max}")
+            if end2end_val is not None and cfg_dict.get("end2end") != end2end_val:
+                orig_end2end = cfg_dict.get("end2end")
+                cfg_dict["end2end"] = end2end_val
+                changed = True
+                suffix_parts.append(f"end2end{str(end2end_val).lower()}")
+                LOGGER.info(f"Overriding model yaml end2end={orig_end2end} → {end2end_val}")
+            if changed:
                 stem = Path(yaml_src).stem
-                tmp = Path(tempfile.gettempdir()) / f"{stem}_regmax{reg_max}.yaml"
+                suffix = "_".join(suffix_parts)
+                tmp = Path(tempfile.gettempdir()) / f"{stem}_{suffix}.yaml"
                 YAML.save(tmp, cfg_dict)
-                LOGGER.info(f"Overriding reg_max={orig_reg_max} → {reg_max}, temp model yaml: {tmp}")
+                LOGGER.info(f"Using temp model yaml: {tmp}")
                 model_yaml = str(tmp)
                 if model_name == yaml_src:
                     model_name = str(tmp)
         except Exception as e:
-            LOGGER.warning(f"Failed to override reg_max in model yaml: {e}")
+            LOGGER.warning(f"Failed to override model yaml: {e}")
 
     train_args = {
         "data": data_config,
@@ -534,7 +548,6 @@ def train(config: Dict):
             train_args[key] = v
 
     # end2end: 从 train 节读取，回退到 validation 节
-    end2end_val = resolve_config_value(config, ("train", "end2end"), ("validation", "end2end"))
     if end2end_val is not None:
         train_args["end2end"] = end2end_val
 
@@ -640,6 +653,9 @@ def train(config: Dict):
         on_train_start, on_fit_epoch_end = _make_val_plot_callback(train_args)
         model.add_callback("on_train_start", on_train_start)
         model.add_callback("on_fit_epoch_end", on_fit_epoch_end)
+
+    if "end2end" in train_args and hasattr(getattr(model, "model", None), "end2end"):
+        model.model.end2end = train_args["end2end"]
 
     results = model.train(**train_args)
 

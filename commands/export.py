@@ -290,6 +290,10 @@ def export(config: Dict):
         supported = ", ".join(sorted(EXPORT_FORMATS.keys()))
         raise ValueError(f"不支持的格式: '{fmt}'. 支持的格式: {supported}")
 
+    if nms and end2end is True:
+        raise ValueError("export.nms=true 与 export.end2end=true 互斥：NMS 导出请设置 end2end=false，端到端导出请设置 nms=false")
+    effective_end2end = False if nms and end2end is None else end2end
+
     # 打印配置
     format_info = EXPORT_FORMATS[fmt]
     print(f"\n{'='*60}")
@@ -304,6 +308,7 @@ def export(config: Dict):
     print(f"动态输入:    {dynamic}")
     print(f"简化:        {simplify}")
     print(f"NMS:         {nms}")
+    print(f"End2End:     {effective_end2end if effective_end2end is not None else 'auto'}")
     print(f"优化:        {optimize}")
     print(f"INT8:        {int8}")
     if opset:
@@ -361,8 +366,8 @@ def export(config: Dict):
         export_args["max_det"] = max_det
     if agnostic_nms is not None:
         export_args["agnostic_nms"] = agnostic_nms
-    if end2end is not None:
-        export_args["end2end"] = end2end
+    if effective_end2end is not None:
+        export_args["end2end"] = effective_end2end
 
     # 运行导出
     start_time = time.perf_counter()
