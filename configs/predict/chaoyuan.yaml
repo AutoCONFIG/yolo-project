@@ -5,7 +5,7 @@
 mode: predict
 
 model:
-  path: runs/detect/chaoyuan/train_20260512_base_p2/weights/best.pt  # 模型路径 (.pt 权重 或 .onnx)
+  path: runs/detect/chaoyuan/train_20260522_p2/weights/best.pt  # 模型路径 (.pt 权重 或 .onnx)
   imgsz: 1280                                       # 输入图像尺寸 (默认 640, 分类建议 224)
   device: auto                                      # 计算设备: null=自动, cpu, 0, 0,1 等
   batch: 32                                         # 批次大小 (推理默认 1, 训练默认 16)
@@ -27,8 +27,8 @@ model:
   classes: null                                     # 类别过滤 (null=全部, [0,1]=只保留指定类别)
 
 io:
-  input: /home/yun/Desktop/5.14张家港            # 输入路径 (图片/目录/视频/URL/摄像头编号)
-  output: runs/predict/train_5.14张家港          # 输出目录路径
+  input: /home/yun/Desktop/test            # 输入路径 (图片/目录/视频/URL/摄像头编号)
+  output: runs/predict/train_522_62         # 输出目录路径
   save_vis: true                                    # 保存可视化结果图片/视频
   save_json: false                                  # 保存推理结果为 JSON 格式
   save_txt: true                                    # 保存 YOLO 格式 txt 标签

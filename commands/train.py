@@ -340,8 +340,6 @@ Examples:
     parser.add_argument("--conf", type=float, default=None, help="置信度阈值")
     parser.add_argument("--iou", type=float, default=None, help="NMS IoU 阈值 (默认 0.7)")
     parser.add_argument("--max-det", type=int, default=None, help="每张图最大检测数 (默认 300)")
-    parser.add_argument("--kpt-thres", type=float, default=None, help="关键点置信度阈值 (仅 pose)")
-    parser.add_argument("--topk", type=int, default=None, help="分类 Top-K (仅 classify)")
 
     # ── Output ────────────────────────────────────────────────────────
     parser.add_argument("--project", type=str, default=None, help="结果根目录的项目名")
@@ -440,7 +438,7 @@ def args_to_config(args: argparse.Namespace) -> Dict[str, Any]:
 
     # Validation
     val_cfg = config_from_args(
-        args, boolean=("val", "half", "plots", "dnn"), plain=("conf", "iou", "max_det", "kpt_thres", "topk")
+        args, boolean=("val", "half", "plots", "dnn"), plain=("conf", "iou", "max_det")
     )
     if val_cfg:
         config["validation"] = {**config.get("validation", {}), **val_cfg}
@@ -547,8 +545,10 @@ def train(config: Dict):
         if v is not None:
             train_args[key] = v
 
-    # end2end: 从 train 节读取，回退到 validation 节
-    if end2end_val is not None:
+    task = get_nested_value(config, "model", "task")
+
+    # end2end: 仅检测类任务支持；classify 不能透传给 Ultralytics train()
+    if end2end_val is not None and (task is None or task in {"detect", "segment", "pose", "obb"}):
         train_args["end2end"] = end2end_val
 
     # classes 过滤器: 从 model 配置节读取 (与 val/predict 一致)
@@ -558,7 +558,6 @@ def train(config: Dict):
 
     if pretrained is not None:
         train_args["pretrained"] = pretrained
-    task = get_nested_value(config, "model", "task")
     if task is not None:
         train_args["task"] = task
 
@@ -571,7 +570,7 @@ def train(config: Dict):
                 "agnostic_nms", "augment", "save_conf", "save_json", "int8",
                 "save_txt", "save_crop", "show", "show_labels", "show_conf",
                 "show_boxes", "line_width", "retina_masks", "visualize",
-                "kpt_thres", "topk", "embed", "vid_stride"):
+                "embed", "vid_stride"):
         v = get_nested_value(config, "validation", key)
         if v is not None:
             train_args[key] = v

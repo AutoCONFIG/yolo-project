@@ -23,7 +23,7 @@ export:
                                              # agnostic_nms: false    # 类别无关 NMS (nms=True 时生效)
   end2end: null                             # 端到端检测头 (YOLO26/YOLOv10, 免 NMS)
   int8: true                                 # INT8 量化导出 (需要校准数据集)
-  data: null                                 # INT8 校准数据集配置 (int8=true 时必需)
+  data: configs/datasets/example/classify_example.yaml  # INT8 校准数据集配置 (int8=true 时必需)
   fraction: 1.0                              # INT8 校准数据集使用比例 (默认 1.0)
 
 output:

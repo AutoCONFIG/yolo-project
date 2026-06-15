@@ -84,7 +84,6 @@ validation:
   save_conf: false                            # 在 txt 标签中保存置信度分数
   int8: false                                 # INT8 量化推理验证
   end2end:                                    # 端到端检测头 (YOLO26/YOLOv10, 免 NMS, pose 通常不用)
-  kpt_thres: 0.5                              # 关键点置信度阈值 (pose 任务专用, 默认 0.5)
 
 output:
   name: parking_pose                          # 实验名称 (null=自动命名)
