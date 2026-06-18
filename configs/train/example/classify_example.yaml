@@ -10,8 +10,8 @@ model:
   task: classify                                          # 任务类型: detect/segment/classify/pose/obb
 
 data:
-  config: configs/datasets/example/classify_example.yaml  # 数据集配置文件路径
-  split: val                                              # 数据集划分: train/val/test
+  config: datasets/classify_example                       # 分类任务填写包含 train/val 子目录的 ImageFolder 根目录
+  split: val                                              # 训练时验证使用 val 子目录
 
 train:
   epochs: 100                                             # 总训练轮数 (早停可能提前结束)

@@ -23,7 +23,7 @@ export:
                                              # agnostic_nms: false    # 类别无关 NMS (nms=True 时生效)
   end2end: null                             # 端到端检测头 (YOLO26/YOLOv10, 免 NMS)
   int8: true                                 # INT8 量化导出 (需要校准数据集)
-  data: configs/datasets/example/classify_example.yaml  # INT8 校准数据集配置 (int8=true 时必需)
+  data: datasets/classify_example           # classify INT8 校准数据集必须是 ImageFolder 根目录，不能是 dataset YAML
   fraction: 1.0                              # INT8 校准数据集使用比例 (默认 1.0)
   workspace: 4                               # TensorRT 工作区大小 (GB, 默认 4)
 

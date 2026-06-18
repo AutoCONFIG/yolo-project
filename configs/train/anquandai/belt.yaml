@@ -10,8 +10,8 @@ model:
   task: classify                                          # 任务类型: detect/segment/classify/pose/obb
 
 data:
-  config: configs/datasets/anquandai/belt.yaml            # 数据集配置文件路径
-  split: val                                              # 数据集划分: train/val/test
+  config: /data2/kaiyun/datasets_anquandai/belt           # 分类任务填写包含 train/val 子目录的 ImageFolder 根目录
+  split: val                                              # 训练时验证使用 val 子目录
 
 train:
   epochs: 600                                             # 预训练微调通常不需要 600 轮，早停会自动截断
