@@ -55,16 +55,17 @@ train:
   overlap_mask: true                                     # 合并重叠实例掩码
   mask_ratio: 4                                          # 掩码下采样比
 
-# 联合数据管线支持：hsv_*、bgr、非空间 Albumentations、fliplr（DetectSegmentRandomFlip 同步翻转双支路）。
-# 其余几何（degrees/translate/scale/shear/perspective/flipud）与混合（mosaic/mixup/cutmix/copy_paste）增强
+# 联合数据管线支持：hsv_*、bgr、非空间 Albumentations、fliplr（同步翻转双支路）、
+# translate/scale（小幅平移缩放抖动，DetectSegmentRandomTranslateScale 同步变换双支路）。
+# 其余几何（degrees/shear/perspective/flipud）与混合（mosaic/mixup/cutmix/copy_paste）增强
 # 在 DetectSegmentDataset.build_transforms 中非零即 raise，必须保持 0。
 augmentation:
   hsv_h: 0.015                                           # HSV 色调增强幅度
   hsv_s: 0.7                                             # HSV 饱和度增强幅度
   hsv_v: 0.4                                             # HSV 明度增强幅度
   degrees: 0.0                                           # 随机旋转角度
-  translate: 0.0                                         # 随机平移比例
-  scale: 0.0                                             # 随机缩放增益
+  translate: 0.1                                         # 随机平移比例（小幅度，提升位置鲁棒性）
+  scale: 0.1                                             # 随机缩放增益（小幅度 [0.9,1.1]，不宜再大：缩小方向伤害小目标）
   shear: 0.0                                             # 随机剪切角度
   perspective: 0.0                                       # 随机透视变换比例
   flipud: 0.0                                            # 垂直翻转概率
