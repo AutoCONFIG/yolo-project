@@ -19,10 +19,10 @@ cfg:                                                     # 额外 Ultralytics cf
 train:
   epochs: 600                                            # 总训练轮数（早停可能提前结束）
   time:                                                  # 最大训练时长（小时），设置后覆盖 epochs
-  batch: 16                                              # 批次大小（960+P2 高分辨率头显存开销大，OOM 则继续减半）
-  imgsz: 960                                             # 输入图像尺寸；目标中位仅 ~14px@640（51% <22px），960 下 ~21px，利于小目标
+  batch: 40                                              # 批次大小（960+P2 高分辨率头显存开销大，OOM 则继续减半）
+  imgsz: 1280                                             # 输入图像尺寸；目标中位仅 ~14px@640（51% <22px），960 下 ~21px，利于小目标
   device: 1,2,3,4,5,6                                           # null=自动，也可填 cpu、0、0,1
-  workers: 8                                             # 数据加载进程数
+  workers: 2                                             # 数据加载进程数
   resume: true                                          # 是否从 last.pt 恢复训练
   patience: 100                                          # 早停耐心轮数
   cache: false                                           # 图像缓存：ram/disk/false
@@ -41,7 +41,7 @@ train:
   lrf: 0.01                                              # 最终学习率比例
   momentum: 0.937                                        # SGD 动量 / Adam beta1
   weight_decay: 0.0005                                   # 权重衰减
-  cos_lr: false                                          # 余弦学习率调度
+  cos_lr: true                                          # 余弦学习率调度
   warmup_epochs: 3.0                                     # 预热轮数
   warmup_momentum: 0.8                                   # 预热初始动量
   warmup_bias_lr: 0.1                                    # 预热偏置学习率
@@ -56,8 +56,8 @@ train:
   seg_box: 7.5                                           # seg 分支边界框+掩码损失增益
   seg_cls: 0.5                                           # seg 分支分类损失增益
   seg_dfl: 1.5                                           # seg 分支 DFL/L1 损失增益
-  close_mosaic: 10                                       # 最后 N 轮关闭 mosaic/mixup/cutmix/copy_paste（mosaic=0 时无影响；开启混合增强时建议保持 10）
-  seed: 0                                                # 随机种子
+  close_mosaic: 50                                       # 最后 N 轮关闭 mosaic/mixup/cutmix/copy_paste（mosaic=0 时无影响；开启混合增强时建议保持 10）
+  seed: 27                                                # 随机种子
   deterministic: true                                    # 使用确定性操作
   overlap_mask: true                                     # 合并重叠实例掩码
   mask_ratio: 4                                          # 掩码下采样比
@@ -70,11 +70,11 @@ augmentation:
   hsv_h: 0.015                                           # HSV 色调增强幅度
   hsv_s: 0.7                                             # HSV 饱和度增强幅度
   hsv_v: 0.4                                             # HSV 明度增强幅度
-  degrees: 0.0                                           # 随机旋转角度（已支持；固定机位保持 0，移动相机可设 2-5）
+  degrees: 0.01                                           # 随机旋转角度（已支持；固定机位保持 0，移动相机可设 2-5）
   translate: 0.1                                         # 随机平移比例（小幅度，提升位置鲁棒性）
   scale: 0.1                                             # 随机缩放增益（小幅度 [0.9,1.1]，不宜再大：缩小方向伤害小目标）
-  shear: 0.0                                             # 随机剪切角度（已支持；本数据保持 0，需要时小幅度）
-  perspective: 0.0                                       # 随机透视变换比例（已支持；本数据保持 0，需要时 ~0.0005）
+  shear: 0.001                                             # 随机剪切角度（已支持；本数据保持 0，需要时小幅度）
+  perspective: 0.001                                       # 随机透视变换比例（已支持；本数据保持 0，需要时 ~0.0005）
   flipud: 0.0                                            # 垂直翻转概率（已支持；道路场景上下翻转语义非法，保持 0）
   fliplr: 0.5                                            # 水平翻转概率（高速场景左右对称，安全有效）
   bgr: 0.0                                               # RGB/BGR 通道交换概率
