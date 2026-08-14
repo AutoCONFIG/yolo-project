@@ -48,13 +48,16 @@ train:
   cls: 0.5                                               # 分类损失增益
   cls_pw: 0.0                                            # 类别权重幂次，0=关闭
   dfl: 1.5                                               # 分布焦点损失增益
-  close_mosaic: 0                                        # 最后 N 轮关闭 Mosaic，当前固定为 0
+  close_mosaic: 10                                       # 最后 N 轮关闭 mosaic/mixup/cutmix/copy_paste（mosaic=0 时无影响；开启混合增强时建议保持 10）
   seed: 0                                                # 随机种子
   deterministic: true                                    # 使用确定性操作
   overlap_mask: true                                     # 合并重叠实例掩码
   mask_ratio: 4                                          # 掩码下采样比
 
-# 当前联合数据管线只启用图像级 HSV/BGR；几何和混合增强保持为 0。
+# 联合数据管线支持：hsv_*、bgr、非空间 Albumentations、flipud/fliplr、
+# degrees/translate/scale/shear/perspective，以及混合增强 mosaic/mixup/cutmix/copy_paste
+# （双支路同步：mosaic 共用画布逐支路拼接、mixup/cutmix 双支路独立合并、copy_paste 仅作用于 seg 支路）。
+# 混合增强默认保持 0：mosaic 会把中位 14px 的小目标压到 ~7px；copy_paste 仅 seg 支路且车道区域跨图粘贴语义错误。
 augmentation:
   hsv_h: 0.015                                           # HSV 色调增强幅度
   hsv_s: 0.7                                             # HSV 饱和度增强幅度
@@ -67,11 +70,11 @@ augmentation:
   flipud: 0.0                                            # 垂直翻转概率
   fliplr: 0.0                                            # 水平翻转概率
   bgr: 0.0                                               # RGB/BGR 通道交换概率
-  mosaic: 0.0                                            # Mosaic 增强概率
-  mixup: 0.0                                             # MixUp 增强概率
-  cutmix: 0.0                                            # CutMix 增强概率
-  copy_paste: 0.0                                        # 分割实例复制粘贴概率
-  copy_paste_mode: flip                                  # 复制粘贴策略：flip/mixup
+  mosaic: 0.0                                            # Mosaic 概率（已支持；目标尺度减半伤害小目标，不建议开启）
+  mixup: 0.0                                             # MixUp 概率（已支持；场景重影语义不真实，保持 0）
+  cutmix: 0.0                                            # CutMix 概率（已支持；同尺度切块不伤小目标，想加混合增强优先试它）
+  copy_paste: 0.0                                        # 复制粘贴概率（已支持，仅 seg 支路；车道区域跨机位粘贴语义错误，保持 0）
+  copy_paste_mode: flip                                  # 复制粘贴策略：flip=同图翻转粘贴/mixup=跨图粘贴
 
 validation:
   val: true                                              # 训练期间运行验证
