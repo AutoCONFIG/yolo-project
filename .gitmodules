@@ -1,3 +1,3 @@
 [submodule "ultralytics"]
 	path = ultralytics
-	url = https://github.com/AutoCONFIG/ultralytics.git
+	url = git@github.com:AutoCONFIG/ultralytics.git
