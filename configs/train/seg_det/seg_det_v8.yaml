@@ -1,0 +1,106 @@
+# YOLOv8 Detect-Segment 联合训练配置
+# ==================================
+# 检测与实例分割共享 backbone/neck，分别使用同目录的 _det.txt 和 _seg.txt 标签。
+
+mode: train
+
+model:
+  name: yolov8n-detect-segment.yaml                       # 模型结构文件
+  pretrained: false                                      # 当前无配套发布权重，从模型 YAML 开始训练
+  task: detect-segment                                   # 检测 + 实例分割联合任务
+  reg_max: 16                                            # 边框分布回归 bins（YOLOv8 默认 16）
+
+data:
+  config: configs/datasets/seg_det/seg_det.yaml           # 数据集配置文件
+  split: val                                             # 训练期间使用的验证集划分
+
+cfg:                                                     # 额外 Ultralytics cfg 覆盖文件，空值=不使用
+
+train:
+  epochs: 100                                            # 总训练轮数（早停可能提前结束）
+  time:                                                  # 最大训练时长（小时），设置后覆盖 epochs
+  batch: 16                                              # 批次大小
+  imgsz: 640                                             # 输入图像尺寸
+  device: null                                           # null=自动，也可填 cpu、0、0,1
+  workers: 8                                             # 数据加载进程数
+  resume: false                                          # 是否从 last.pt 恢复训练
+  patience: 100                                          # 早停耐心轮数
+  cache: false                                           # 图像缓存：ram/disk/false
+  save: true                                             # 是否保存训练检查点
+  amp: true                                              # 自动混合精度训练
+  rect: false                                            # 矩形批量训练
+  fraction: 1.0                                          # 使用的数据集比例
+  freeze:                                                # 冻结前 N 层或层索引列表
+  multi_scale: 0.0                                       # 多尺度训练范围，0.0=关闭
+  compile: false                                         # torch.compile 优化
+  nbs: 64                                                # 名义批次大小，用于损失归一化
+  profile: false                                         # 训练时性能分析
+  optimizer: auto                                        # SGD/Adam/AdamW/auto
+  lr0: 0.01                                              # 初始学习率
+  lrf: 0.01                                              # 最终学习率比例
+  momentum: 0.937                                        # SGD 动量 / Adam beta1
+  weight_decay: 0.0005                                   # 权重衰减
+  cos_lr: false                                          # 余弦学习率调度
+  warmup_epochs: 3.0                                     # 预热轮数
+  warmup_momentum: 0.8                                   # 预热初始动量
+  warmup_bias_lr: 0.1                                    # 预热偏置学习率
+  box: 7.5                                               # 边界框损失增益
+  cls: 0.5                                               # 分类损失增益
+  cls_pw: 0.0                                            # 类别权重幂次，0=关闭
+  dfl: 1.5                                               # 分布焦点损失增益
+  close_mosaic: 0                                        # 最后 N 轮关闭 Mosaic，当前固定为 0
+  seed: 0                                                # 随机种子
+  deterministic: true                                    # 使用确定性操作
+  overlap_mask: true                                     # 合并重叠实例掩码
+  mask_ratio: 4                                          # 掩码下采样比
+
+# 当前联合数据管线只启用图像级 HSV/BGR；几何和混合增强保持为 0。
+augmentation:
+  hsv_h: 0.015                                           # HSV 色调增强幅度
+  hsv_s: 0.7                                             # HSV 饱和度增强幅度
+  hsv_v: 0.4                                             # HSV 明度增强幅度
+  degrees: 0.0                                           # 随机旋转角度
+  translate: 0.0                                         # 随机平移比例
+  scale: 0.0                                             # 随机缩放增益
+  shear: 0.0                                             # 随机剪切角度
+  perspective: 0.0                                       # 随机透视变换比例
+  flipud: 0.0                                            # 垂直翻转概率
+  fliplr: 0.0                                            # 水平翻转概率
+  bgr: 0.0                                               # RGB/BGR 通道交换概率
+  mosaic: 0.0                                            # Mosaic 增强概率
+  mixup: 0.0                                             # MixUp 增强概率
+  cutmix: 0.0                                            # CutMix 增强概率
+  copy_paste: 0.0                                        # 分割实例复制粘贴概率
+  copy_paste_mode: flip                                  # 复制粘贴策略：flip/mixup
+
+validation:
+  val: true                                              # 训练期间运行验证
+  conf:                                                  # 置信度阈值，空值使用验证默认值
+  iou: 0.7                                               # NMS IoU 阈值（非端到端时使用）
+  max_det: 300                                           # 每图最大检测数
+  half: false                                            # FP16 半精度验证
+  plots: true                                            # 生成验证图表 (PR曲线/混淆矩阵/F1曲线等)
+  save_json: false                                       # 保存 COCO 格式 JSON
+  save_txt: false                                        # 保存预测 txt
+  save_crop: false                                       # 保存检测框裁剪图
+  save_conf: false                                       # 在预测 txt 中保存置信度
+  dnn: false                                             # 使用 OpenCV DNN 验证 ONNX
+  agnostic_nms: false                                    # 类别无关 NMS
+  augment: false                                         # 测试时增强 TTA
+  quantize: false                                        # INT8 量化验证
+  show: false                                            # 实时显示验证结果
+  show_labels: true                                      # 显示类别标签
+  show_conf: true                                        # 显示置信度
+  show_boxes: true                                       # 显示检测框
+  line_width:                                            # 框线宽，空值自动计算
+  retina_masks: false                                    # 使用原图分辨率掩码
+  visualize: false                                       # 可视化模型特征
+  embed:                                                 # 返回指定层的特征向量
+  vid_stride: 1                                          # 视频帧采样步长
+
+output:
+  project:                                               # 结果保存子目录，空值使用默认 runs/
+  name: seg_det_v8                                       # 实验名称
+  save_period: -1                                        # 每 N 轮保存检查点，-1=仅 best/last
+  exist_ok: true                                         # 允许复用已有实验目录
+  verbose: true                                          # 输出详细训练日志

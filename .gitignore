@@ -6,3 +6,8 @@ __pycache__/
 AGENTS.md
 runs/
 .omo/
+docs/
+tests/
+.pytest_cache/
+.ruff_cache/
+claude.md

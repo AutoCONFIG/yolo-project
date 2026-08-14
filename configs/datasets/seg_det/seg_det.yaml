@@ -1,0 +1,22 @@
+path: /data2/kaiyun/datasets_seg_det
+
+train: train_seg_det.txt
+val: val_seg_det.txt
+
+detect_names:
+  0: vehicle                                # 机动车
+  1: person                                 # 人
+  2: non_motor_vehicle                      # 非机动车
+  3: tricycle                               # 三轮车
+  4: traffic_cone                           # 锥桶
+  5: road_debris                            # 路面抛洒物
+  6: smoke                                  # 烟
+  7: fire                                   # 火
+  8: fog                                    # 雾
+  9: traffic_light                          # 信号灯
+  10: traffic_sign                          # 交通标志牌
+
+segment_names:
+  0: highway_up                             # 高速上行
+  1: highway_down                           # 高速下行
+  2: isolation_zone                         # 隔离带  
