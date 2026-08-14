@@ -1,19 +1,11 @@
 """
 YOLO Training Module
 =====================
-Standalone training module invoked via ``python yolo.py train`` or
-``python -m commands.train``.
-
-Uses YAML config files and/or CLI arguments.  CLI takes precedence over YAML.
+Internal training implementation dispatched by the unified YAML entry point.
 
 Typical usage::
 
-    # Via unified entry point
-    python yolo.py train --config configs/train/chaoyuan.yaml
-    python yolo.py train --model yolo26n.pt --data coco8.yaml --epochs 50
-
-    # Direct invocation
-    python -m commands.train --config configs/train/chaoyuan.yaml
+    python yolo.py configs/train/chaoyuan.yaml
 """
 
 import argparse
@@ -208,7 +200,7 @@ Examples:
     parser.add_argument(
         "--task",
         type=str,
-        choices=["detect", "segment", "classify", "pose", "obb"],
+        choices=["detect", "segment", "detect-segment", "classify", "pose", "obb"],
         default=None,
         help="任务类型",
     )
@@ -548,7 +540,7 @@ def train(config: Dict):
     task = get_nested_value(config, "model", "task")
 
     # end2end: 仅检测类任务支持；classify 不能透传给 Ultralytics train()
-    if end2end_val is not None and (task is None or task in {"detect", "segment", "pose", "obb"}):
+    if end2end_val is not None and (task is None or task in {"detect", "detect-segment", "segment", "pose", "obb"}):
         train_args["end2end"] = end2end_val
 
     # classes 过滤器: 从 model 配置节读取 (与 val/predict 一致)
@@ -595,6 +587,14 @@ def train(config: Dict):
     name = train_args.get("name")
 
     task_for_dir = task
+    # YAML 里 name/project 写成纯数字（如 name: 20260814）会被解析成 int，
+    # 拼路径时 PosixPath / int 会报错，这里统一强转成 str。
+    if name is not None:
+        name = str(name)
+        train_args["name"] = name
+    if project is not None:
+        project = str(project)
+        train_args["project"] = project
     if task_for_dir is None:
         try:
             from ultralytics import YOLO as _YOLO
