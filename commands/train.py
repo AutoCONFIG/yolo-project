@@ -532,6 +532,7 @@ def train(config: Dict):
         "compile", "profile", "batch",
         "cls_pw", "pose", "kobj", "rle", "angle", "overlap_mask",
         "mask_ratio", "dropout",
+        "det_box", "det_cls", "det_dfl", "seg_box", "seg_cls", "seg_dfl",
     ):
         v = get_nested_value(config, "train", key)
         if v is not None:

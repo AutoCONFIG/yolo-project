@@ -48,27 +48,33 @@ train:
   box: 7.5                                               # 边界框损失增益
   cls: 0.5                                               # 分类损失增益
   cls_pw: 0.0                                            # 类别权重幂次，0=关闭
-  dfl: 1.5                                               # 分布焦点损失增益
+  dfl: 1.5                                               # 分布焦点损失增益（v26 reg_max=1 时作为 L1 增益）
+  # ── det/seg 分支独立损失增益（仅 detect-segment 任务生效），空值跟随上面的 box/cls/dfl ──
+  det_box: 7.5                                           # det 分支边界框损失增益
+  det_cls: 0.5                                           # det 分支分类损失增益
+  det_dfl: 1.5                                           # det 分支 DFL/L1 损失增益
+  seg_box: 7.5                                           # seg 分支边界框+掩码损失增益
+  seg_cls: 0.5                                           # seg 分支分类损失增益
+  seg_dfl: 1.5                                           # seg 分支 DFL/L1 损失增益
   close_mosaic: 0                                        # 最后 N 轮关闭 Mosaic，当前固定为 0
   seed: 0                                                # 随机种子
   deterministic: true                                    # 使用确定性操作
   overlap_mask: true                                     # 合并重叠实例掩码
   mask_ratio: 4                                          # 掩码下采样比
 
-# 联合数据管线支持：hsv_*、bgr、非空间 Albumentations、fliplr（同步翻转双支路）、
-# translate/scale（小幅平移缩放抖动，DetectSegmentRandomTranslateScale 同步变换双支路）。
-# 其余几何（degrees/shear/perspective/flipud）与混合（mosaic/mixup/cutmix/copy_paste）增强
-# 在 DetectSegmentDataset.build_transforms 中非零即 raise，必须保持 0。
+# 联合数据管线支持：hsv_*、bgr、非空间 Albumentations、flipud/fliplr、
+# degrees/translate/scale/shear/perspective（DetectSegmentRandomPerspective 同步变换双支路）。
+# 仅混合增强（mosaic/mixup/cutmix/copy_paste）未实现，非零即 raise，必须保持 0。
 augmentation:
   hsv_h: 0.015                                           # HSV 色调增强幅度
   hsv_s: 0.7                                             # HSV 饱和度增强幅度
   hsv_v: 0.4                                             # HSV 明度增强幅度
-  degrees: 0.0                                           # 随机旋转角度
+  degrees: 0.0                                           # 随机旋转角度（已支持；固定机位保持 0，移动相机可设 2-5）
   translate: 0.1                                         # 随机平移比例（小幅度，提升位置鲁棒性）
   scale: 0.1                                             # 随机缩放增益（小幅度 [0.9,1.1]，不宜再大：缩小方向伤害小目标）
-  shear: 0.0                                             # 随机剪切角度
-  perspective: 0.0                                       # 随机透视变换比例
-  flipud: 0.0                                            # 垂直翻转概率
+  shear: 0.0                                             # 随机剪切角度（已支持；本数据保持 0，需要时小幅度）
+  perspective: 0.0                                       # 随机透视变换比例（已支持；本数据保持 0，需要时 ~0.0005）
+  flipud: 0.0                                            # 垂直翻转概率（已支持；道路场景上下翻转语义非法，保持 0）
   fliplr: 0.5                                            # 水平翻转概率（高速场景左右对称，安全有效）
   bgr: 0.0                                               # RGB/BGR 通道交换概率
   mosaic: 0.0                                            # Mosaic 增强概率
