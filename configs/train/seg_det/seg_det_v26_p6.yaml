@@ -19,8 +19,8 @@ cfg:                                                     # 额外 Ultralytics cf
 train:
   epochs: 100                                            # 总训练轮数（早停可能提前结束）
   time:                                                  # 最大训练时长（小时），设置后覆盖 epochs
-  batch: 16                                              # 批次大小
-  imgsz: 640                                             # 输入图像尺寸
+  batch: 8                                               # 批次大小（960+P6 显存开销大，OOM 则继续减半）
+  imgsz: 960                                             # 输入图像尺寸；目标中位仅 ~14px@640（51% <22px），960 下 ~21px，利于小目标
   device: null                                           # null=自动，也可填 cpu、0、0,1
   workers: 8                                             # 数据加载进程数
   resume: false                                          # 是否从 last.pt 恢复训练
@@ -31,7 +31,7 @@ train:
   rect: false                                            # 矩形批量训练
   fraction: 1.0                                          # 使用的数据集比例
   freeze:                                                # 冻结前 N 层或层索引列表
-  multi_scale: 0.0                                       # 多尺度训练范围，0.0=关闭
+  multi_scale: 0.25                                      # 多尺度训练范围（batch 张量 resize，不改标签，安全）；小目标为主不宜超过 0.25
   compile: false                                         # torch.compile 优化
   end2end: true                                          # YOLO26 端到端头，免 NMS
   nbs: 64                                                # 名义批次大小，用于损失归一化
@@ -55,7 +55,9 @@ train:
   overlap_mask: true                                     # 合并重叠实例掩码
   mask_ratio: 4                                          # 掩码下采样比
 
-# 当前联合数据管线只启用图像级 HSV/BGR；几何和混合增强保持为 0。
+# 联合数据管线支持：hsv_*、bgr、非空间 Albumentations、fliplr（DetectSegmentRandomFlip 同步翻转双支路）。
+# 其余几何（degrees/translate/scale/shear/perspective/flipud）与混合（mosaic/mixup/cutmix/copy_paste）增强
+# 在 DetectSegmentDataset.build_transforms 中非零即 raise，必须保持 0。
 augmentation:
   hsv_h: 0.015                                           # HSV 色调增强幅度
   hsv_s: 0.7                                             # HSV 饱和度增强幅度
@@ -66,7 +68,7 @@ augmentation:
   shear: 0.0                                             # 随机剪切角度
   perspective: 0.0                                       # 随机透视变换比例
   flipud: 0.0                                            # 垂直翻转概率
-  fliplr: 0.0                                            # 水平翻转概率
+  fliplr: 0.5                                            # 水平翻转概率（高速场景左右对称，安全有效）
   bgr: 0.0                                               # RGB/BGR 通道交换概率
   mosaic: 0.0                                            # Mosaic 增强概率
   mixup: 0.0                                             # MixUp 增强概率
