@@ -1,0 +1,23 @@
+mode: export
+
+model:
+  path: runs/detect-segment/seg_det/weights/best.pt
+  format: onnx
+  imgsz: 640
+  batch: 1
+  device: auto
+
+export:
+  half: false
+  dynamic: true
+  simplify: true
+  opset: null
+  nms: false
+  int8: false
+
+output:
+  path: null
+  verbose: true
+
+verify:
+  enabled: false

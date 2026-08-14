@@ -1,0 +1,25 @@
+# YOLO Detect-Segment Dataset Configuration
+# ==========================================
+# 共享图片流 + 独立检测/实例分割标签。两个任务的类别 ID 各自从 0 开始。
+#
+# 图片与标签放在同一目录。例如 images/train/paired/1.jpg 对应:
+#   images/train/paired/1_det.txt
+#   images/train/paired/1_seg.txt
+# 只有检测标注时仅创建 detect 标签；只有分割标注时仅创建 segment 标签。
+# 标签文件不存在表示该任务未标注，不参与该分支损失和指标。
+# 标签文件存在但为空表示已确认该图没有该任务目标，作为背景负样本参与训练。
+
+path: ../datasets/detect_segment_example
+
+# 共享图片目录；其下可用来源子目录避免不同数据集出现同名图片。
+train: images/train
+val: images/val
+
+# 两个任务使用独立类别空间，可按实际数据修改。
+detect_names:
+  0: vehicle
+  1: person
+  2: traffic_sign
+
+segment_names:
+  0: road

@@ -23,14 +23,8 @@ configs/predict/
 ### 命令行方式
 
 ```bash
-# 使用配置文件
-python yolo.py predict --config configs/predict/example/detect_example.yaml
-
-# 覆盖配置文件中的参数
-python yolo.py predict --config configs/predict/example/detect_example.yaml --conf 0.5 --half
-
-# 不使用配置文件，纯命令行
-python yolo.py predict --model best.pt --input images/ --output results/ --conf 0.25
+# 所有参数都在 YAML 中配置
+python yolo.py configs/predict/example/detect_example.yaml
 ```
 
 ### Python 代码方式
@@ -147,42 +141,42 @@ results = engine.inference_batch(images)
 ### 1. 检测任务
 
 ```bash
-python yolo.py predict --config configs/predict/example/detect_example.yaml
+python yolo.py configs/predict/example/detect_example.yaml
 ```
 
 ### 2. 分割任务
 
 ```bash
-python yolo.py predict --config configs/predict/example/segment_example.yaml
+python yolo.py configs/predict/example/segment_example.yaml
 ```
 
 ### 3. 分类任务
 
 ```bash
-python yolo.py predict --config configs/predict/example/classify_example.yaml
+python yolo.py configs/predict/example/classify_example.yaml
 ```
 
 ### 4. 姿态估计
 
 ```bash
-python yolo.py predict --config configs/predict/example/pose_example.yaml
+python yolo.py configs/predict/example/pose_example.yaml
 ```
 
 ### 5. 旋转框检测
 
 ```bash
-python yolo.py predict --config configs/predict/example/obb_example.yaml
+python yolo.py configs/predict/example/obb_example.yaml
 ```
 
 ### 6. 目标跟踪
 
 ```bash
-python yolo.py predict --config configs/predict/example/track_example.yaml
+python yolo.py configs/predict/example/track_example.yaml
 ```
 
 ## 注意事项
 
-1. **配置文件优先级**: 命令行参数 > 配置文件 > 默认值
+1. **配置方式**: CLI 只接受一个 YAML 文件，参数请直接在 YAML 中修改
 2. **任务匹配**: 确保配置文件与模型任务类型匹配
 3. **GPU 内存**: OBB 和分割任务内存占用大，适当减小 batch
 4. **精度选择**: half=true 提速明显且精度损失小，推荐开启

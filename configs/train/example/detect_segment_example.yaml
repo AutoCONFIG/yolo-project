@@ -1,0 +1,96 @@
+# YOLO Detect-Segment Training Configuration
+# ===========================================
+# 共享 backbone/neck，组合原生 Detect 和 Segment 任务头。
+
+mode: train
+
+model:
+  name: yolov8n-detect-segment.yaml
+  pretrained: false                                     # 当前无配套发布权重，从模型 YAML 开始训练
+  task: detect-segment
+
+data:
+  config: configs/datasets/example/detect_segment_example.yaml
+  split: val
+
+train:
+  epochs: 100
+  time:
+  batch: 16
+  imgsz: 640
+  device: null                                          # null=自动, cpu, 0, 0,1
+  workers: 8
+  resume: false
+  patience: 100
+  cache: false
+  save: true
+  amp: true
+  rect: false
+  single_cls: false                                     # 两个任务类别空间独立，不支持 single_cls
+  fraction: 1.0
+  freeze:
+  multi_scale: 0.0
+  compile: false
+  nbs: 64
+  profile: false
+  optimizer: auto
+  lr0: 0.01
+  lrf: 0.01
+  momentum: 0.937
+  weight_decay: 0.0005
+  cos_lr: false
+  warmup_epochs: 3.0
+  warmup_momentum: 0.8
+  warmup_bias_lr: 0.1
+  box: 7.5
+  cls: 0.5
+  cls_pw: 0.0
+  dfl: 1.5
+  close_mosaic: 0
+  seed: 0
+  deterministic: true
+  overlap_mask: true
+  mask_ratio: 4
+
+# 当前双任务数据管线只启用共享 LetterBox 和图像级 HSV/BGR。
+# 几何变换、Mosaic、MixUp、CutMix、Copy-Paste 必须保持为 0。
+augmentation:
+  hsv_h: 0.015
+  hsv_s: 0.7
+  hsv_v: 0.4
+  degrees: 0.0
+  translate: 0.0
+  scale: 0.0
+  shear: 0.0
+  perspective: 0.0
+  flipud: 0.0
+  fliplr: 0.0
+  bgr: 0.0
+  mosaic: 0.0
+  mixup: 0.0
+  cutmix: 0.0
+  copy_paste: 0.0
+  copy_paste_mode: flip                                  # 复制粘贴策略 (flip/mixup, segment 任务专用, 默认 flip)
+
+validation:
+  val: true
+  conf:
+  iou: 0.7
+  max_det: 300
+  half: false
+  plots: false                                          # 当前双任务 MVP 不生成合并标签图
+  save_json: false
+  save_txt: false
+  dnn: false
+  agnostic_nms: false
+  augment: false                                        # 当前不支持 TTA
+  save_conf: false
+  int8: false
+  retina_masks: false
+
+output:
+  project:
+  name: detect_segment_example
+  save_period: -1
+  exist_ok: false
+  verbose: true

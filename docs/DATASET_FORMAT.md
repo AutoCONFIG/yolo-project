@@ -157,11 +157,8 @@ names:
 ### 3. 开始训练
 
 ```bash
-# 使用配置文件训练
-python yolo.py train --config configs/default.yaml --data your_dataset.yaml
-
-# 或者命令行直接指定
-python yolo.py train --model yolo26n.pt --data your_dataset.yaml --epochs 100
+# 在训练 YAML 中设置 data.config 后运行
+python yolo.py configs/train/example/detect_segment_example.yaml
 ```
 
 ## 常见问题
@@ -243,10 +240,6 @@ yolo-project/
 │   └── export.py                # 导出模块
 ├── utils/
 │   └── config.py                # 共享配置工具
-├── run_train.sh                 # 训练启动脚本
-├── run_val.sh                   # 验证启动脚本
-├── run_predict.sh               # 推理启动脚本
-├── run_export.sh                # 导出启动脚本
 ├── configs/
 │   ├── default.yaml           # 默认训练配置
 │   ├── val.yaml               # 验证配置

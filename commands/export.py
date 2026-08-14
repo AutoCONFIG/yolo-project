@@ -1,25 +1,14 @@
 """
 YOLO Export Module
 ===================
-Standalone model export module invoked via ``python yolo.py export`` or
-``python -m commands.export``.
+Internal export implementation dispatched by the unified YAML entry point.
 
 Export trained YOLO models to various deployment formats:
 ONNX, TensorRT, TorchScript, OpenVINO, etc.
 
-Uses YAML config files and/or CLI arguments.  CLI takes precedence over YAML.
-
 Typical usage::
 
-    # Via unified entry point
-    python yolo.py export --model best.pt
-    python yolo.py export --model best.pt --format engine --half true
-
-    # Direct invocation
-    python -m commands.export --model best.pt --format onnx
-
-    # Using config file
-    python -m commands.export --config configs/export/onnx.yaml
+    python yolo.py configs/export/example/onnx/detect_example.yaml
 """
 
 from __future__ import annotations

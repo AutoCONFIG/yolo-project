@@ -1,0 +1,29 @@
+mode: predict
+
+model:
+  path: runs/detect-segment/seg_det/weights/best.onnx
+  imgsz: 640
+  device: auto
+  batch: 1
+  retina_masks: false
+
+io:
+  input: /media/yun/706bc403-c76c-4fdd-8a3f-d954b6189048/datasets/road_seg
+  output: runs/inference/seg_det
+  save_vis: true
+  save_json: false
+  save_txt: false
+
+nms:
+  conf: 0.25
+  iou: 0.7
+  max_det: 300
+  agnostic_nms: false
+
+visualization:
+  show_labels: true
+  show_conf: true
+  mask_alpha: 0.4
+
+output:
+  verbose: true

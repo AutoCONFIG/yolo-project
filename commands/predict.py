@@ -1,15 +1,14 @@
 """
 YOLO Prediction / Inference Module
 =====================================
-CLI frontend for running YOLO inference.
+Inference implementation dispatched by the unified YAML entry point.
 
 All business logic lives in ``core/``; this module only handles
 argument parsing and delegates to ``core.engine``.
 
 Usage::
 
-    python yolo.py predict --config configs/predict/chaoyuan.yaml
-    python yolo.py predict --model best.pt --input images/ --output results/
+    python yolo.py configs/predict/chaoyuan.yaml
 """
 
 import argparse
@@ -174,7 +173,7 @@ def parse_args() -> argparse.Namespace:
 Examples:
     python -m commands.predict --model best.pt --input images/ --output results/
     python -m commands.predict --model model.onnx --input images/
-    python yolo.py predict --config configs/predict/chaoyuan.yaml
+    python yolo.py configs/predict/chaoyuan.yaml
         """,
     )
 

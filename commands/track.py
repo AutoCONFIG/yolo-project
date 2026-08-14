@@ -1,15 +1,14 @@
 """
 YOLO Tracking Module
 ====================
-CLI frontend for running YOLO object tracking.
+Tracking implementation dispatched by the unified YAML entry point.
 
 Tracking is built on top of detection/segmentation/pose inference,
 adding multi-object tracking (ByteTrack / BoT-SORT) with persistent IDs.
 
 Usage::
 
-    python yolo.py track --config configs/predict/example/track_example.yaml
-    python yolo.py track --model best.pt --input video.mp4 --tracker botsort.yaml
+    python yolo.py configs/predict/example/track_example.yaml
 """
 
 import argparse
@@ -50,9 +49,7 @@ def parse_args() -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-    python yolo.py track --model best.pt --input video.mp4
-    python yolo.py track --config configs/predict/example/track_example.yaml
-    python yolo.py track --model best.pt --input video.mp4 --tracker bytetrack.yaml
+    python yolo.py configs/predict/example/track_example.yaml
         """,
     )
 

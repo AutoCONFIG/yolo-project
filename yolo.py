@@ -4,15 +4,16 @@ YOLO Unified CLI Entry Point
 
 Usage:
 
-    python yolo.py --config configs/train/chaoyuan.yaml
-    python yolo.py --config configs/validate/val.yaml
-    python yolo.py --config configs/predict/chaoyuan.yaml
-    python yolo.py --config configs/export/example/onnx/detect_example.yaml
+    python yolo.py configs/train/chaoyuan.yaml
+    python yolo.py configs/validate/val.yaml
+    python yolo.py configs/predict/chaoyuan.yaml
+    python yolo.py configs/export/example/onnx/detect_example.yaml
 
 Mode is auto-detected from the 'mode' field in the YAML config file.
 """
 
 import sys
+from pathlib import Path
 
 
 MODES = {
@@ -25,26 +26,24 @@ MODES = {
 
 
 def main():
-    if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
+    if len(sys.argv) == 2 and sys.argv[1] in ("-h", "--help"):
         print(__doc__.strip())
-        sys.exit(0 if len(sys.argv) >= 2 and sys.argv[1] in ("-h", "--help") else 1)
+        return
+    if len(sys.argv) != 2:
+        print("Error: expected exactly one YAML config path")
+        sys.exit(1)
 
     import yaml
 
-    config_path = None
-    for i, arg in enumerate(sys.argv[1:], 1):
-        if arg in ("--config", "-c") and i < len(sys.argv) - 1:
-            config_path = sys.argv[i + 1]
-            break
-
-    if config_path is None:
-        print("Error: --config is required")
+    config_path = Path(sys.argv[1])
+    if config_path.suffix.lower() not in {".yaml", ".yml"}:
+        print(f"Error: config must be a YAML file: {config_path}")
         sys.exit(1)
 
     try:
-        with open(config_path, "r", encoding="utf-8") as f:
+        with config_path.open("r", encoding="utf-8") as f:
             cfg = yaml.safe_load(f)
-        mode = cfg.get("mode")
+        mode = cfg.get("mode") if isinstance(cfg, dict) else None
     except Exception as e:
         print(f"Error reading config: {e}")
         sys.exit(1)
@@ -54,7 +53,7 @@ def main():
         print(f"Valid modes: {', '.join(MODES.keys())}")
         sys.exit(1)
 
-    sys.argv = ["yolo.py"] + sys.argv[1:]
+    sys.argv = ["yolo.py", "--config", str(config_path)]
     import importlib
     importlib.import_module(MODES[mode]).main()
 

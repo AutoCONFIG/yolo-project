@@ -4,3 +4,5 @@ weights/
 __pycache__/
 .vscode/
 AGENTS.md
+runs/
+.omo/

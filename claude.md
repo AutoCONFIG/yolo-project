@@ -323,8 +323,7 @@ The following bugs were identified and fixed during the comprehensive audit:
 
 | File | Change |
 |------|--------|
-| `run_train.sh` | Populated (was empty stub) — follows `run_export.sh` pattern, default: `configs/train/example/detect_example.yaml` |
-| `run_predict.sh` | Populated (was empty stub) — default: `configs/predict/example/detect_example.yaml` |
-| `run_val.sh` | Populated (was empty stub) — default: `configs/validate/example/detect_example.yaml` |
+`yolo.py` is the only public CLI entry point and accepts exactly one YAML path, for example
+`python yolo.py configs/train/example/detect_segment_example.yaml`. The YAML `mode` selects the operation.
 
 All 3 shell scripts support `--config/-c` for custom config, with fallback to default then CLI-only mode.

@@ -50,7 +50,7 @@ export:
 1. Copy an example config from the appropriate subdirectory
 2. Modify `model.path` to point to your trained model
 3. Adjust export options (simplify, dynamic, half, int8, etc.)
-4. Run: `python yolo.py export --config your_config.yaml`
+4. Run: `python yolo.py your_config.yaml`
 
 ## Common Options
 

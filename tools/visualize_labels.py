@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-YOLO Pose 标签可视化工具
-========================
-将 YOLO pose 格式的 txt 标签绘制到对应图片上，用于快速检查标注质量。
+YOLO Pose/Seg 标签可视化工具
+============================
+将 YOLO pose 或 segmentation 格式的 txt 标签绘制到对应图片上，用于快速检查标注质量。
 
 支持功能:
 1. 单文件或批量目录可视化
@@ -15,6 +15,7 @@ YOLO Pose 标签可视化工具
   class_id cx cy w h kpt1_x kpt1_y kpt1_v ... kptN_x kptN_y kptN_v
 
 Usage:
+  python visualize_labels.py path/to/images path/to/rendered
   python visualize_labels.py --labels runs/inference/labels --images runs/inference/vis
   python visualize_labels.py --labels path/to/labels --images path/to/images --save-dir output/vis
   python visualize_labels.py --labels path/to/labels --images path/to/images --browse
@@ -33,10 +34,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import cv2
 import numpy as np
 
-from utils.constants import IMG_EXTENSIONS, DEFAULT_KPT_SHAPE, DEFAULT_SKELETON, DEFAULT_KPT_COLORS, DEFAULT_KPT_NAMES
-from utils.io import read_text_robust
 from core.visualization import draw_dashed_line
-
+from utils.constants import (
+    DEFAULT_KPT_COLORS,
+    DEFAULT_KPT_NAMES,
+    DEFAULT_KPT_SHAPE,
+    DEFAULT_SKELETON,
+    IMG_EXTENSIONS,
+)
+from utils.io import read_text_robust
 
 # ========== 默认参数 ==========
 DEFAULT_BOX_COLOR = (0, 255, 0)  # BGR: 绿色
@@ -101,7 +107,7 @@ def draw_annotations(
 ):
     """在图片上绘制边界框、关键点和骨架。"""
     h_img, w_img = img.shape[:2]
-    nkpt, ndim = kpt_shape
+    nkpt, _ndim = kpt_shape
 
     for ann in annotations:
         cx, cy, w, h = ann["bbox"]
@@ -265,8 +271,11 @@ def batch_save(entries: list[tuple[Path, Path]], args):
             kpt_names=args.kpt_names_list,
         )
 
-        out_path = save_dir / f"{img_path.stem}.jpg"
-        cv2.imencode(".jpg", vis)[1].tofile(str(out_path))
+        out_path = save_dir / img_path.relative_to(args.source_root)
+        if out_path.suffix.lower() not in {".jpg", ".jpeg", ".png"}:
+            out_path = out_path.with_suffix(".jpg")
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        cv2.imencode(out_path.suffix, vis)[1].tofile(str(out_path))
 
         if (i + 1) % 50 == 0 or i == len(entries) - 1:
             print(f"  进度: {i + 1}/{len(entries)}")
@@ -287,96 +296,69 @@ def parse_color(s: str) -> tuple[int, int, int]:
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="YOLO Pose 标签可视化工具",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=__doc__,
-    )
-    parser.add_argument("--labels", type=str, default=None,
-                        help="标签目录或单个txt文件路径")
-    parser.add_argument("--images", type=str, nargs="+", default=[],
-                        help="图片目录（可指定多个，按优先级搜索）")
-    parser.add_argument("--save-dir", type=str, default=None,
-                        help="保存可视化结果的目录（不指定则必须用 --browse）")
-    parser.add_argument("--browse", action="store_true", default=False,
-                        help="交互式逐张浏览")
-    parser.add_argument("--kpt-shape", type=int, nargs=2, default=DEFAULT_KPT_SHAPE,
-                        metavar=("N_KPT", "N_DIM"),
-                        help=f"关键点配置 (默认: {DEFAULT_KPT_SHAPE[0]} {DEFAULT_KPT_SHAPE[1]})")
-    parser.add_argument("--box-color", type=parse_color, default=DEFAULT_BOX_COLOR,
-                        help=f"边界框颜色 R,G,B (默认: 0,255,0)")
-    parser.add_argument("--box-thickness", type=int, default=2,
-                        help="边界框线宽 (默认: 2)")
-    parser.add_argument("--kpt-radius", type=int, default=5,
-                        help="关键点圆半径 (默认: 5)")
-    parser.add_argument("--skeleton-thickness", type=int, default=2,
-                        help="骨架线宽 (默认: 2)")
-    parser.add_argument("--font-scale", type=float, default=0.5,
-                        help="字体大小 (默认: 0.5)")
-    parser.add_argument("--show-labels", action="store_true", default=True, dest="show_labels",
-                        help="显示类别标签 (默认开启)")
-    parser.add_argument("--no-labels", action="store_false", dest="show_labels",
-                        help="不显示类别标签")
-    parser.add_argument("--filter-empty", action="store_true", default=False,
-                        help="跳过没有标注的图片")
-    parser.add_argument("--kpt-names", type=str, nargs="+", default=None,
-                        help=f"关键点名称列表 (默认: {' '.join(DEFAULT_KPT_NAMES)})")
+    parser = argparse.ArgumentParser(description="自动渲染 YOLO segmentation 或 pose 标签")
+    parser.add_argument("input_path", help="原始图片、标签文件或数据集目录")
+    parser.add_argument("output_path", help="渲染结果输出目录")
+    cli = parser.parse_args()
 
-    args = parser.parse_args()
-    args.kpt_shape = tuple(args.kpt_shape)
-    args.kpt_colors = DEFAULT_KPT_COLORS
-    args.skeleton = DEFAULT_SKELETON
-    args.kpt_names_list = args.kpt_names if args.kpt_names is not None else DEFAULT_KPT_NAMES
+    source = Path(cli.input_path).absolute()
+    output = Path(cli.output_path).absolute()
+    if not source.exists():
+        parser.error(f"输入路径不存在: {source}")
 
-    if not args.labels:
-        parser.error("--labels 是必需的，请指定标签目录或文件")
-    if not args.browse and not args.save_dir:
-        parser.error("请指定 --save-dir 或使用 --browse")
-
-    labels_path = Path(args.labels)
-    image_dirs = [Path(p).resolve() for p in args.images]
-
-    # 收集标签文件
-    if labels_path.is_file():
-        label_files = [labels_path]
-    elif labels_path.is_dir():
-        label_files = collect_label_files(labels_path)
+    source_root = source if source.is_dir() else source.parent
+    if source.is_file() and source.suffix.lower() in IMG_EXTENSIONS:
+        segment_label = source.with_name(f"{source.stem}_seg.txt")
+        pose_label = source.with_suffix(".txt")
+        segment_files = [segment_label] if segment_label.is_file() else []
+        pose_files = [pose_label] if not segment_files and pose_label.is_file() else []
+    elif source.is_file():
+        segment_files = [source] if source.name.endswith("_seg.txt") else []
+        pose_files = [] if segment_files else [source]
     else:
-        print(f"错误: 路径不存在 {labels_path}")
+        segment_files = sorted(source.rglob("*_seg.txt"))
+        pose_files = [] if segment_files else [path for path in collect_label_files(source) if path.name != "classes.txt"]
+
+    if segment_files:
+        from tools.visualize_yolo_seg import find_image, render, save_image
+
+        for label_path in segment_files:
+            image_path = find_image(label_path)
+            relative = image_path.relative_to(source_root)
+            destination = output / relative
+            if destination.suffix.lower() not in {".jpg", ".jpeg", ".png"}:
+                destination = destination.with_suffix(".jpg")
+            save_image(destination, render(label_path))
+        print(f"完成: segmentation，{len(segment_files)} 张，输出到 {output}")
         return
 
-    if not label_files:
-        print("未找到标签文件")
-        return
+    if not pose_files:
+        parser.error("未找到可视化标签")
 
-    print(f"找到 {len(label_files)} 个标签文件")
-
-    # 匹配图片
     entries = []
-    missing = 0
-    for lbl in label_files:
-        img = find_image_for_label(lbl, image_dirs, labels_dir=labels_path)
-        if img:
-            entries.append((lbl, img))
-        else:
-            missing += 1
-
-    if missing > 0:
-        print(f"  {missing} 个标签未找到对应图片")
-
-    if args.filter_empty:
-        entries = [(l, i) for l, i in entries if parse_label_file(l, args.kpt_shape)]
-
+    for label_path in pose_files:
+        image_path = find_image_for_label(label_path, [source_root], labels_dir=source_root)
+        if image_path is not None:
+            entries.append((label_path, image_path))
     if not entries:
-        print("没有可可视化的图片")
-        return
+        parser.error("未找到标签对应的图片")
 
-    print(f"匹配到 {len(entries)} 张图片")
-
-    if args.browse:
-        browse_images(entries, args)
-    else:
-        batch_save(entries, args)
+    render_args = argparse.Namespace(
+        save_dir=str(output),
+        source_root=source_root,
+        kpt_shape=DEFAULT_KPT_SHAPE,
+        kpt_colors=DEFAULT_KPT_COLORS,
+        skeleton=DEFAULT_SKELETON,
+        box_color=DEFAULT_BOX_COLOR,
+        box_thickness=2,
+        kpt_radius=5,
+        skeleton_thickness=2,
+        font_scale=0.5,
+        show_labels=True,
+        kpt_names_list=DEFAULT_KPT_NAMES,
+    )
+    print(f"识别为 pose，匹配到 {len(entries)} 张图片")
+    batch_save(entries, render_args)
 
 
 if __name__ == "__main__":
