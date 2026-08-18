@@ -638,8 +638,36 @@ def train(config: Dict):
 
     last_pt = (save_dir / "weights" / "last.pt") if save_dir else None
     if resume and last_pt and last_pt.exists():
-        print(f"从检查点恢复: {last_pt}")
-        model = YOLO(str(last_pt))
+        # 检查 last.pt 是否为可恢复检查点（含 epoch/optimizer 状态）。
+        # 训练正常结束后 strip_optimizer 会把 epoch 置 -1、optimizer 置 None，
+        # 此类 last.pt 无法续训，Ultralytics 会静默降级为新训练——这里显式告知用户。
+        from ultralytics.utils.patches import torch_load
+
+        try:
+            ckpt_info = torch_load(str(last_pt), map_location="cpu")
+            resumable = (
+                isinstance(ckpt_info, dict)
+                and ckpt_info.get("epoch", -1) >= 0
+                and ckpt_info.get("optimizer") is not None
+            )
+        except Exception as e:
+            resumable = False
+            LOGGER.warning(f"读取检查点失败，无法判断是否可恢复: {last_pt} ({e})")
+
+        if resumable:
+            print(f"从检查点恢复: {last_pt} (epoch={ckpt_info.get('epoch')})")
+            model = YOLO(str(last_pt))
+        else:
+            LOGGER.warning(
+                f"last.pt 不可恢复（缺少 epoch/optimizer 状态，可能是训练已正常结束被 strip）：{last_pt}\n"
+                "将从头开始新训练。如需续训，请使用训练中途中断的 last.pt。"
+            )
+            if model_yaml:
+                model = YOLO(model_yaml, task=task) if task else YOLO(model_yaml)
+                if isinstance(pretrained, str):
+                    model.load(pretrained)
+            else:
+                model = YOLO(model_name)
     else:
         if resume:
             print(f"检查点未找到{f': {last_pt}' if last_pt else ' (未指定 project/name)'}, 从零开始训练")
@@ -664,11 +692,13 @@ def train(config: Dict):
 
     results = model.train(**train_args)
 
+    # model.train() 返回 metrics（DDP/detect-segment 下可能是 dict），不含 save_dir 属性。
+    # 输出目录用本地已算出的 save_dir，避免 AttributeError。
     print(f"\n{'='*60}")
     print("训练完成！")
-    print(f"结果保存至: {results.save_dir}")
-    print(f"最佳权重: {results.save_dir}/weights/best.pt")
-    print(f"最后权重: {results.save_dir}/weights/last.pt")
+    print(f"结果保存至: {save_dir}")
+    print(f"最佳权重: {save_dir}/weights/best.pt")
+    print(f"最后权重: {save_dir}/weights/last.pt")
     print(f"{'='*60}\n")
 
     return results
