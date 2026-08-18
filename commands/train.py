@@ -33,6 +33,7 @@ setup_ultralytics_path()
 from ultralytics import YOLO
 from ultralytics.nn.tasks import yaml_model_load
 from ultralytics.utils import LOGGER, YAML
+from ultralytics.utils.files import increment_path
 
 
 def _safe_wrap_plot_methods(validator):
@@ -609,10 +610,14 @@ def train(config: Dict):
         name = "train"
         train_args["name"] = name
     if project:
-        save_dir = (project_root / project / name).resolve()
+        save_dir = (project_root / project / name)
     else:
-        save_dir = (project_root / name).resolve()
-    train_args["save_dir"] = str(save_dir)
+        save_dir = (project_root / name)
+    # exist_ok=False 时递增目录名（train_xxx-2、-3…），避免新训练覆盖旧 output；
+    # exist_ok=True 时沿用原路径。与 Ultralytics get_save_dir 行为一致。
+    exist_ok = train_args.get("exist_ok", False)
+    save_dir = increment_path(save_dir, exist_ok=exist_ok)
+    train_args["save_dir"] = str(save_dir.resolve())
 
     print(f"\n{'='*60}")
     print("YOLO 训练配置")
