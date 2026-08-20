@@ -39,7 +39,7 @@ engine = YOLOInference(
     nms_config=NMSConfig(conf_threshold=0.25, iou_threshold=0.7),
     device="cuda",
     imgsz=640,
-    half=True,
+    quantize=16,
     stream=False,
     augment=False,
 )
@@ -65,12 +65,11 @@ results = engine.inference_batch(images)
 | batch | int | 1 | 推理批次大小 |
 | classes | list/null | null | 类别过滤 (null=全部, [0,1]=只保留指定类别) |
 | stream | bool | false | 流式推理模式 (视频/摄像头推荐 true) |
-| half | bool | false | FP16 半精度推理 (需 GPU 支持) |
+| quantize | int/str/null | null | 推理精度 (null=FP32, 16/fp16=FP16, 8/int8=INT8) |
 | augment | bool | false | 测试时增强 TTA (慢但可能提升精度) |
 | vid_stride | int | 1 | 视频跳帧间隔 |
 | visualize | bool | false | 可视化模型特征图 (调试用) |
 | embed | list/null | null | 特征嵌入层索引 (调试用) |
-| int8 | bool | false | INT8 量化推理 (ONNX/TensorRT 等支持) |
 | dnn | bool | false | 使用 OpenCV DNN 进行 ONNX 推理 |
 | show | bool | false | 弹窗显示结果 (需图形界面支持) |
 | save_frames | bool | false | 保存视频推理的每一帧为图片 |
@@ -179,5 +178,5 @@ python yolo.py configs/predict/example/track_example.yaml
 1. **配置方式**: CLI 只接受一个 YAML 文件，参数请直接在 YAML 中修改
 2. **任务匹配**: 确保配置文件与模型任务类型匹配
 3. **GPU 内存**: OBB 和分割任务内存占用大，适当减小 batch
-4. **精度选择**: half=true 提速明显且精度损失小，推荐开启
+4. **精度选择**: quantize=16 提速明显且精度损失小，推荐开启
 5. **视频处理**: 大视频务必开启 stream=true 避免内存溢出

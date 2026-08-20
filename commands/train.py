@@ -341,9 +341,8 @@ Examples:
     set_boolean_argument(parser, "exist_ok", "exist-ok", help_true="覆盖已有项目/名称", help_false="不覆盖")
     set_boolean_argument(parser, "verbose", "verbose", help_true="详细输出", help_false="简洁输出")
     set_boolean_argument(parser, "plots", "plots", help_true="训练/验证时保存图表", help_false="不保存图表")
-    set_boolean_argument(
-        parser, "half", "half", help_true="FP16 半精度验证", help_false="全精度验证"
-    )
+    parser.add_argument("--quantize", default=None, type=lambda s: int(s) if s.isdigit() else s,
+                        help="验证精度: 16/fp16=FP16, 8/int8=INT8 (默认 FP32)")
     set_boolean_argument(
         parser, "dnn", "dnn", help_true="使用 OpenCV DNN 进行 ONNX 推理", help_false="不使用 DNN"
     )
@@ -431,7 +430,7 @@ def args_to_config(args: argparse.Namespace) -> Dict[str, Any]:
 
     # Validation
     val_cfg = config_from_args(
-        args, boolean=("val", "half", "plots", "dnn"), plain=("conf", "iou", "max_det")
+        args, boolean=("val", "plots", "dnn"), plain=("conf", "iou", "max_det", "quantize")
     )
     if val_cfg:
         config["validation"] = {**config.get("validation", {}), **val_cfg}
@@ -560,8 +559,8 @@ def train(config: Dict):
         train_args["split"] = split
 
     # Validation 节参数 -> 传给 train (ultralytics model.train 统一接受)
-    for key in ("val", "conf", "iou", "max_det", "half", "plots", "dnn",
-                "agnostic_nms", "augment", "save_conf", "save_json", "int8",
+    for key in ("val", "conf", "iou", "max_det", "quantize", "plots", "dnn",
+                "agnostic_nms", "augment", "save_conf", "save_json",
                 "save_txt", "save_crop", "show", "show_labels", "show_conf",
                 "show_boxes", "line_width", "retina_masks", "visualize",
                 "embed", "vid_stride"):

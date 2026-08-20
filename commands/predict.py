@@ -184,13 +184,13 @@ Examples:
     parser.add_argument("--batch", type=int, default=None, help="推理批大小")
 
     set_boolean_argument(parser, "stream", "stream", help_true="流式推理", help_false="非流式")
-    set_boolean_argument(parser, "half", "half", help_true="FP16 半精度", help_false="全精度")
+    parser.add_argument("--quantize", default=None, type=lambda s: int(s) if s.isdigit() else s,
+                        help="推理精度: 16/fp16=FP16, 8/int8=INT8 (默认 FP32)")
     set_boolean_argument(parser, "augment", "augment", help_true="TTA 增强", help_false="无 TTA")
     parser.add_argument("--vid-stride", type=int, default=None, help="视频帧步长")
     set_boolean_argument(parser, "retina_masks", "retina-masks", help_true="高分辨率掩码", help_false="标准掩码")
     set_boolean_argument(parser, "visualize", "visualize", help_true="可视化特征", help_false="不可视化")
     parser.add_argument("--embed", type=int, nargs="+", default=None, help="特征嵌入层索引")
-    set_boolean_argument(parser, "int8", "int8", help_true="INT8 量化", help_false="无 INT8")
     set_boolean_argument(parser, "dnn", "dnn", help_true="OpenCV DNN ONNX 推理", help_false="不使用 DNN")
     set_boolean_argument(parser, "end2end", "end2end", help_true="端到端检测头 (YOLO26/YOLOv10)", help_false="标准检测头")
     parser.add_argument("--kpt-thres", type=float, default=None, help="关键点阈值 (仅姿态估计)")
@@ -235,10 +235,10 @@ def args_to_config(args: argparse.Namespace) -> Dict[str, Any]:
     # Model
     model_cfg = config_from_args(
         args,
-        plain=("model", "imgsz", "device", "batch", "classes",
+        plain=("model", "imgsz", "device", "batch", "classes", "quantize",
                "vid_stride", "embed", "line_width", "topk", "kpt_thres"),
-        boolean=("stream", "half", "augment", "retina_masks", "visualize",
-                 "int8", "save_frames", "stream_buffer", "save_conf", "dnn", "end2end", "show",
+        boolean=("stream", "augment", "retina_masks", "visualize",
+                 "save_frames", "stream_buffer", "save_conf", "dnn", "end2end", "show",
                  "show_boxes"),
         rename={"model": "path"},
     )
@@ -291,13 +291,12 @@ def predict(config: Dict) -> None:
     classes_filter = get_nested_value(config, "model", "classes")
 
     stream = get_nested_value(config, "model", "stream", default=False)
-    half = get_nested_value(config, "model", "half", default=False)
+    quantize = get_nested_value(config, "model", "quantize")
     augment = get_nested_value(config, "model", "augment", default=False)
     vid_stride = get_nested_value(config, "model", "vid_stride", default=1)
     retina_masks = get_nested_value(config, "model", "retina_masks", default=False)
     visualize = get_nested_value(config, "model", "visualize", default=False)
     embed = get_nested_value(config, "model", "embed")
-    int8 = get_nested_value(config, "model", "int8", default=False)
     line_width = get_nested_value(config, "model", "line_width")
     save_frames = get_nested_value(config, "model", "save_frames", default=False)
     stream_buffer = get_nested_value(config, "model", "stream_buffer", default=False)
@@ -341,7 +340,7 @@ def predict(config: Dict) -> None:
     print(f"图像尺寸: {imgsz}")
     print(f"批大小: {batch_size}")
     print(f"NMS: conf={nms_config.conf_threshold}, iou={nms_config.iou_threshold}, max_det={nms_config.max_detections}, agnostic={nms_config.agnostic}")
-    print(f"增强: augment={augment}, half={half}, stream={stream}")
+    print(f"增强: augment={augment}, quantize={quantize}, stream={stream}")
     print(f"类别过滤: {classes_filter}")
     print(f"{'='*60}\n")
 
@@ -353,13 +352,12 @@ def predict(config: Dict) -> None:
         classes=classes_filter,
         batch_size=batch_size,
         stream=stream,
-        half=half,
+        quantize=quantize,
         augment=augment,
         vid_stride=vid_stride,
         retina_masks=retina_masks,
         visualize=visualize,
         embed=embed,
-        int8=int8,
         line_width=line_width,
         save_frames=save_frames,
         stream_buffer=stream_buffer,

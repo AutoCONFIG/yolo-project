@@ -52,13 +52,12 @@ class YOLOInference:
         classes: Optional[List[int]] = None,
         batch_size: int = 1,
         stream: bool = False,
-        half: bool = False,
+        quantize: Optional[Union[int, str]] = None,
         augment: bool = False,
         vid_stride: int = 1,
         retina_masks: bool = False,
         visualize: bool = False,
         embed: Optional[Union[List[int], int]] = None,
-        int8: bool = False,
         line_width: Optional[int] = None,
         save_frames: bool = False,
         stream_buffer: bool = False,
@@ -75,13 +74,12 @@ class YOLOInference:
         self.classes_filter = classes
         self.batch_size = batch_size
         self.stream = stream
-        self.half = half
+        self.quantize = quantize
         self.augment = augment
         self.vid_stride = vid_stride
         self.retina_masks = retina_masks
         self.visualize = visualize
         self.embed = embed
-        self.int8 = int8
         self.line_width = line_width
         self.save_frames = save_frames
         self.stream_buffer = stream_buffer
@@ -353,18 +351,18 @@ class YOLOInference:
             classes=self.classes_filter,
             verbose=False,
             stream=self.stream,
-            half=self.half,
             augment=self.augment,
             vid_stride=self.vid_stride,
             visualize=self.visualize,
             embed=self.embed,
-            int8=self.int8,
             save_conf=self.save_conf,
             save_frames=self.save_frames,
             stream_buffer=self.stream_buffer,
             dnn=self.dnn,
             show=self.show,
         )
+        if self.quantize is not None:
+            kwargs["quantize"] = self.quantize
         # line_width: 仅在显式设置时传递
         if self.line_width is not None:
             kwargs["line_width"] = self.line_width

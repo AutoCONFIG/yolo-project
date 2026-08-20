@@ -61,12 +61,12 @@ Examples:
     parser.add_argument("--tracker", type=str, default=None, help="跟踪器配置 (botsort.yaml / bytetrack.yaml)")
 
     set_boolean_argument(parser, "stream", "stream", help_true="流式推理", help_false="非流式")
-    set_boolean_argument(parser, "half", "half", help_true="FP16 半精度", help_false="全精度")
+    parser.add_argument("--quantize", default=None, type=lambda s: int(s) if s.isdigit() else s,
+                        help="推理精度: 16/fp16=FP16, 8/int8=INT8 (默认 FP32)")
     set_boolean_argument(parser, "augment", "augment", help_true="TTA 增强", help_false="无 TTA")
     set_boolean_argument(parser, "retina_masks", "retina-masks", help_true="高分辨率掩码", help_false="标准掩码")
     parser.add_argument("--vid-stride", type=int, default=None, help="视频帧步长")
     set_boolean_argument(parser, "visualize", "visualize", help_true="可视化特征", help_false="不可视化")
-    set_boolean_argument(parser, "int8", "int8", help_true="INT8 量化", help_false="无 INT8")
     set_boolean_argument(parser, "dnn", "dnn", help_true="OpenCV DNN ONNX 推理", help_false="不使用 DNN")
     set_boolean_argument(parser, "end2end", "end2end", help_true="端到端检测头 (YOLO26/YOLOv10)", help_false="标准检测头")
     set_boolean_argument(parser, "save_conf", "save-conf", help_true="保存置信度到结果", help_false="不保存置信度")
@@ -111,10 +111,10 @@ def args_to_config(args: argparse.Namespace) -> Dict[str, Any]:
 
     model_cfg = config_from_args(
         args,
-        plain=("model", "imgsz", "device", "batch", "classes",
+        plain=("model", "imgsz", "device", "batch", "classes", "quantize",
                "vid_stride", "line_width", "tracker", "embed", "topk", "kpt_thres"),
-        boolean=("stream", "half", "augment", "retina_masks", "visualize",
-                 "int8", "save_frames", "stream_buffer", "save_conf", "dnn", "end2end", "show",
+        boolean=("stream", "augment", "retina_masks", "visualize",
+                 "save_frames", "stream_buffer", "save_conf", "dnn", "end2end", "show",
                  "show_boxes", "persist"),
         rename={"model": "path"},
     )
@@ -164,12 +164,11 @@ def track(config: Dict) -> None:
     persist = get_nested_value(config, "model", "persist", default=False)
 
     stream = get_nested_value(config, "model", "stream", default=False)
-    half = get_nested_value(config, "model", "half", default=False)
+    quantize = get_nested_value(config, "model", "quantize")
     augment = get_nested_value(config, "model", "augment", default=False)
     vid_stride = get_nested_value(config, "model", "vid_stride", default=1)
     retina_masks = get_nested_value(config, "model", "retina_masks", default=False)
     visualize = get_nested_value(config, "model", "visualize", default=False)
-    int8 = get_nested_value(config, "model", "int8", default=False)
     line_width = get_nested_value(config, "model", "line_width")
     save_frames = get_nested_value(config, "model", "save_frames", default=False)
     stream_buffer = get_nested_value(config, "model", "stream_buffer", default=False)
@@ -224,13 +223,12 @@ def track(config: Dict) -> None:
         classes=classes_filter,
         batch_size=batch_size,
         stream=stream,
-        half=half,
+        quantize=quantize,
         augment=augment,
         vid_stride=vid_stride,
         retina_masks=retina_masks,
         visualize=visualize,
         embed=embed,
-        int8=int8,
         line_width=line_width,
         save_frames=save_frames,
         stream_buffer=stream_buffer,

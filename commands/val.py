@@ -76,7 +76,6 @@ Examples:
     parser.add_argument("--embed", type=int, nargs="+", default=None, help="特征嵌入层索引")
     parser.add_argument("--vid-stride", type=int, default=None, help="视频帧间隔")
     parser.add_argument("--fraction", type=float, default=None, help="使用数据集的比例 (0.0-1.0)")
-    set_boolean_argument(parser, "half", "half", help_true="FP16 半精度验证", help_false="全精度验证")
     set_boolean_argument(parser, "plots", "plots", help_true="保存验证图表", help_false="不保存图表")
     set_boolean_argument(
         parser, "save_json", "save-json", help_true="保存 COCO JSON 结果", help_false="不保存 JSON"
@@ -101,13 +100,11 @@ Examples:
         help_true="在 txt 标签中保存置信度分数", help_false="不保存置信度"
     )
     set_boolean_argument(
-        parser, "int8", "int8",
-        help_true="INT8 量化推理验证", help_false="不使用 INT8"
-    )
-    set_boolean_argument(
-        parser, "end2end", "end2end",
+        parser, "end2end",
         help_true="端到端检测头验证 (YOLO26/YOLOv10)", help_false="标准验证"
     )
+    parser.add_argument("--quantize", default=None, type=lambda s: int(s) if s.isdigit() else s,
+                        help="验证精度: 16/fp16=FP16, 8/int8=INT8 (默认 FP32)")
     parser.add_argument(
         "--kpt-thres", type=float, default=None,
         help="关键点置信度阈值 (仅 pose 任务)",
@@ -197,11 +194,11 @@ def args_to_config(args: argparse.Namespace) -> Dict[str, Any]:
     # Validation
     val_cfg = config_from_args(
         args,
-        boolean=("half", "plots", "save_json", "dnn", "agnostic_nms",
-                 "augment", "rect", "save_conf", "int8", "end2end",
+        boolean=("plots", "save_json", "dnn", "agnostic_nms",
+                 "augment", "rect", "save_conf", "end2end",
                  "save_txt", "save_crop", "show", "show_labels", "show_conf",
                  "show_boxes", "retina_masks", "visualize"),
-        plain=("conf", "iou", "max_det", "fraction", "line_width", "workers"),
+        plain=("conf", "iou", "max_det", "fraction", "line_width", "workers", "quantize"),
     )
     if args.cache is not None:
         cache_val = to_bool(args.cache)
@@ -239,7 +236,6 @@ def validate(config: Dict):
         "dnn": get_nested_value(config, "validation", "dnn", default=False),
         "agnostic_nms": get_nested_value(config, "validation", "agnostic_nms", default=False),
         "augment": get_nested_value(config, "validation", "augment", default=False),
-        "half": get_nested_value(config, "validation", "half", default=False),
         "max_det": get_nested_value(config, "validation", "max_det", default=300),
         "verbose": get_nested_value(config, "output", "verbose", default=True),
     }
@@ -282,10 +278,10 @@ def validate(config: Dict):
     if save_conf is not None:
         val_args["save_conf"] = save_conf
 
-    # INT8 量化推理验证
-    int8 = get_nested_value(config, "validation", "int8")
-    if int8 is not None:
-        val_args["int8"] = int8
+    # 推理精度 (16=FP16, 8=INT8, None=FP32)
+    quantize = get_nested_value(config, "validation", "quantize")
+    if quantize is not None:
+        val_args["quantize"] = quantize
 
     # 端到端检测头 (YOLO26/YOLOv10, 无 NMS 推理)
     end2end = get_nested_value(config, "validation", "end2end")
