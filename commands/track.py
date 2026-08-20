@@ -39,6 +39,7 @@ from utils.config import (
     to_bool,
 )
 from utils.constants import DEFAULT_IMGSZ, DEFAULT_MASK_ALPHA, DEFAULT_KPT_RADIUS, DEFAULT_KPT_LINE
+from utils.io import contained_path
 
 setup_ultralytics_path()
 
@@ -412,7 +413,7 @@ def _track_video(
             if not r.detections:
                 continue
             frame_name = Path(r.image_path).stem if r.image_path else f"frame_{len(all_results)}"
-            txt_path = txt_dir / f"{frame_name}.txt"
+            txt_path = contained_path(txt_dir, f"{frame_name}.txt")
             img_h, img_w = r.image_shape
             with open(txt_path, "w") as f:
                 for det in r.detections:

@@ -16,3 +16,12 @@ def read_text_robust(path: Path) -> str:
             continue
 
     return raw.decode("latin-1")
+
+
+def contained_path(root: Path, *parts) -> Path:
+    """拼接 root 下的路径并校验最终位置不越出 root，防止路径穿越写入。"""
+    resolved_root = Path(root).resolve()
+    target = resolved_root.joinpath(*map(str, parts)).resolve()
+    if not target.is_relative_to(resolved_root):
+        raise ValueError(f"检测到路径穿越: {target} 超出目录 {resolved_root}")
+    return target

@@ -380,6 +380,15 @@ def copy_or_link(src: Path, dst: Path, mode: str = "soft") -> None:
     shutil.copy2(src, dst)
 
 
+def contained_path(root: Path, *parts: str) -> Path:
+    """拼接 root 下的路径并校验最终位置不越出 root，防止路径穿越写入。"""
+    resolved_root = root.resolve()
+    target = (resolved_root / Path(*parts)).resolve()
+    if not target.is_relative_to(resolved_root):
+        raise ValueError(f"检测到路径穿越: {target} 超出输出目录 {resolved_root}")
+    return target
+
+
 def process_label(src_txt: Path, dst_txt: Path, task_type: str = "pose", kpt_shape: tuple[int, int] | None = None) -> tuple[int, int, int]:
     """
     处理整个标签文件。
@@ -549,8 +558,8 @@ def main():
 
         for img_path, txt_path in pairs:
             safe_base, suffix = make_safe_name(img_path, source)
-            dst_img = output / "images" / split_name / f"{safe_base}{suffix}"
-            dst_txt = output / "labels" / split_name / f"{safe_base}.txt"
+            dst_img = contained_path(output, "images", split_name, f"{safe_base}{suffix}")
+            dst_txt = contained_path(output, "labels", split_name, f"{safe_base}.txt")
 
             copy_or_link(img_path, dst_img, mode=args.link_mode)
             list_file.write(f"{dst_img.resolve()}\n")
@@ -562,15 +571,15 @@ def main():
 
         for img_path in empty_imgs:
             safe_base, suffix = make_safe_name(img_path, source)
-            dst_img = output / "images" / split_name / f"{safe_base}{suffix}"
-            dst_txt = output / "labels" / split_name / f"{safe_base}.txt"
+            dst_img = contained_path(output, "images", split_name, f"{safe_base}{suffix}")
+            dst_txt = contained_path(output, "labels", split_name, f"{safe_base}.txt")
 
             copy_or_link(img_path, dst_img, mode=args.link_mode)
             list_file.write(f"{dst_img.resolve()}\n")
             dst_txt.touch()
 
-    with open(output / "train.txt", "w", encoding="utf-8") as train_list_file, \
-         open(output / "val.txt", "w", encoding="utf-8") as val_list_file:
+    with contained_path(output, "train.txt").open("w", encoding="utf-8") as train_list_file, \
+         contained_path(output, "val.txt").open("w", encoding="utf-8") as val_list_file:
         process_split(train_pairs, empty_train, "train", train_list_file)
         process_split(val_pairs, empty_val, "val", val_list_file)
 

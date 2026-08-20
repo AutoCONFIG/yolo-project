@@ -49,6 +49,7 @@ from utils.constants import (
     DEFAULT_MAX_DETECTIONS,
     DEFAULT_PREDICT_OUTPUT,
 )
+from utils.io import contained_path
 
 setup_ultralytics_path()
 
@@ -102,12 +103,12 @@ def _save_result(
             if x2 <= x1 or y2 <= y1:
                 continue
             crop = image[y1:y2, x1:x2]
-            crop_path = crop_dir / f"{det.class_name}_{j}.jpg"
+            crop_path = contained_path(crop_dir, f"{det.class_name}_{j}.jpg")
             cv2.imwrite(str(crop_path), crop)
 
     if save_txt:
         txt_dir = output_path / "labels"
-        txt_path = txt_dir / str(rel_path.with_suffix(".txt"))
+        txt_path = contained_path(txt_dir, str(rel_path.with_suffix(".txt")))
         txt_path.parent.mkdir(parents=True, exist_ok=True)
         img_h, img_w = result.image_shape
         with open(txt_path, "w") as f:
