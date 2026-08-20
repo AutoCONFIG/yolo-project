@@ -30,6 +30,7 @@ class DetectionResult:
     class_name: str
     mask: Optional[np.ndarray] = None  # 分割掩码 (二值)
     keypoints: Optional[List[List[float]]] = None  # 姿态关键点 [(x, y, conf), ...]
+    branch: Optional[str] = None  # detect-segment 多任务模型的分支来源: "detect" / "segment"
 
 
 # ─── Image Result ───────────────────────────────────────────────────────────
@@ -76,6 +77,8 @@ class ImageResult:
                     det_dict["mask"] = d.mask.tolist()
                 if d.keypoints is not None:
                     det_dict["keypoints"] = d.keypoints
+                if d.branch is not None:
+                    det_dict["branch"] = d.branch
                 result["detections"].append(det_dict)
 
         if self.task_type == "obb" and self.obb_boxes:
