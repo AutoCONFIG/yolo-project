@@ -560,7 +560,7 @@ def train(config: Dict):
 
     # Validation 节参数 -> 传给 train (ultralytics model.train 统一接受)
     for key in ("val", "conf", "iou", "max_det", "half", "plots", "dnn",
-                "agnostic_nms", "augment", "save_conf", "save_json", "int8",
+                "agnostic_nms", "augment", "save_conf", "save_json",
                 "save_txt", "save_crop", "show", "show_labels", "show_conf",
                 "show_boxes", "line_width", "retina_masks", "visualize",
                 "embed", "vid_stride"):

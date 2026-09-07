@@ -13,7 +13,7 @@ model:
   vid_stride: 1                                     # 视频跳帧间隔 (1=每帧处理, 2=隔一帧处理)
   visualize: false                                  # 可视化模型特征图 (调试用)
   augment: true                                     # 测试时增强 TTA (慢但可能提升精度)
-  int8: false                                       # INT8 量化推理 (ONNX/TensorRT 等支持)
+  quantize: null                                       # 推理精度: null/32=FP32, 16=FP16
   dnn: false                                        # 使用 OpenCV DNN 进行 ONNX 推理
   show: false                                       # 弹窗显示结果 (需图形界面支持)
   save_frames: false                                # 保存视频推理的每一帧为图片

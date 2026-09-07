@@ -49,7 +49,7 @@ export:
 
 1. Copy an example config from the appropriate subdirectory
 2. Modify `model.path` to point to your trained model
-3. Adjust export options (simplify, dynamic, half, int8, etc.)
+3. Adjust export options (simplify, dynamic, half, quantize, etc.)
 4. Run: `python yolo.py your_config.yaml`
 
 ## Common Options
@@ -57,7 +57,7 @@ export:
 - `simplify`: Simplify ONNX graph (recommended, default: true)
 - `dynamic`: Dynamic input shapes (default: false)
 - `half`: FP16 half-precision export (default: false)
-- `int8`: INT8 quantization (requires calibration data)
+- `quantize`: Export precision — `8` (INT8, requires calibration data), `16` (FP16), `32` (FP32), `w8a16`/`w8a32` (mixed)
 - `opset`: ONNX opset version (auto-detected if not specified)
 
 ## Note

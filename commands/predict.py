@@ -37,6 +37,7 @@ from utils.config import (
     merge_configs,
     resolve_config_value,
     set_boolean_argument,
+    parse_quantize,
     setup_ultralytics_path,
     to_bool,
 )
@@ -190,7 +191,7 @@ Examples:
     set_boolean_argument(parser, "retina_masks", "retina-masks", help_true="高分辨率掩码", help_false="标准掩码")
     set_boolean_argument(parser, "visualize", "visualize", help_true="可视化特征", help_false="不可视化")
     parser.add_argument("--embed", type=int, nargs="+", default=None, help="特征嵌入层索引")
-    set_boolean_argument(parser, "int8", "int8", help_true="INT8 量化", help_false="无 INT8")
+    parser.add_argument("--quantize", type=str, default=None, help="推理精度: 16=FP16, 32=FP32 (默认 null 跟随后端)")
     set_boolean_argument(parser, "dnn", "dnn", help_true="OpenCV DNN ONNX 推理", help_false="不使用 DNN")
     set_boolean_argument(parser, "end2end", "end2end", help_true="端到端检测头 (YOLO26/YOLOv10)", help_false="标准检测头")
     parser.add_argument("--kpt-thres", type=float, default=None, help="关键点阈值 (仅姿态估计)")
@@ -236,9 +237,9 @@ def args_to_config(args: argparse.Namespace) -> Dict[str, Any]:
     model_cfg = config_from_args(
         args,
         plain=("model", "imgsz", "device", "batch", "classes",
-               "vid_stride", "embed", "line_width", "topk", "kpt_thres"),
+               "vid_stride", "embed", "line_width", "topk", "kpt_thres", "quantize"),
         boolean=("stream", "half", "augment", "retina_masks", "visualize",
-                 "int8", "save_frames", "stream_buffer", "save_conf", "dnn", "end2end", "show",
+                 "save_frames", "stream_buffer", "save_conf", "dnn", "end2end", "show",
                  "show_boxes"),
         rename={"model": "path"},
     )
@@ -297,7 +298,7 @@ def predict(config: Dict) -> None:
     retina_masks = get_nested_value(config, "model", "retina_masks", default=False)
     visualize = get_nested_value(config, "model", "visualize", default=False)
     embed = get_nested_value(config, "model", "embed")
-    int8 = get_nested_value(config, "model", "int8", default=False)
+    quantize = get_nested_value(config, "model", "quantize")
     line_width = get_nested_value(config, "model", "line_width")
     save_frames = get_nested_value(config, "model", "save_frames", default=False)
     stream_buffer = get_nested_value(config, "model", "stream_buffer", default=False)
@@ -359,7 +360,7 @@ def predict(config: Dict) -> None:
         retina_masks=retina_masks,
         visualize=visualize,
         embed=embed,
-        int8=int8,
+        quantize=quantize,
         line_width=line_width,
         save_frames=save_frames,
         stream_buffer=stream_buffer,

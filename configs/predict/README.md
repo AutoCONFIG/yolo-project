@@ -82,7 +82,7 @@ results = engine.inference_batch(images)
 | vid_stride | int | 1 | 视频跳帧间隔 |
 | visualize | bool | false | 可视化模型特征图 (调试用) |
 | embed | list/null | null | 特征嵌入层索引 (调试用) |
-| int8 | bool | false | INT8 量化推理 (ONNX/TensorRT 等支持) |
+| quantize | int/str/null | null | 推理精度: null/32=FP32, 16=FP16 |
 | dnn | bool | false | 使用 OpenCV DNN 进行 ONNX 推理 |
 | show | bool | false | 弹窗显示结果 (需图形界面支持) |
 | save_frames | bool | false | 保存视频推理的每一帧为图片 |

@@ -100,7 +100,7 @@ COMMON_TRAIN = {
     "validation.augment",
     "validation.save_conf",
     "validation.save_json",
-    "validation.int8",
+    "validation.quantize",
     "validation.save_txt",
     "validation.save_crop",
     "validation.show",
@@ -142,7 +142,7 @@ WRONG_TASK_KEYS = {
         "validation.dnn",
         "validation.save_conf",
         "validation.save_json",
-        "validation.int8",
+        "validation.quantize",
         "validation.retina_masks",
         "train.overlap_mask",
         "train.mask_ratio",
@@ -190,7 +190,7 @@ VALIDATE_COMMON = {
     "validation.augment",
     "validation.rect",
     "validation.save_conf",
-    "validation.int8",
+    "validation.quantize",
     "validation.end2end",
     "validation.save_txt",
     "validation.save_crop",
@@ -230,7 +230,7 @@ PREDICT_COMMON = {
     "model.augment",
     "model.retina_masks",
     "model.visualize",
-    "model.int8",
+    "model.quantize",
     "model.save_frames",
     "model.stream_buffer",
     "model.save_conf",
@@ -297,7 +297,7 @@ EXPORT_KEYS = {
     "export.half",
     "export.nms",
     "export.optimize",
-    "export.int8",
+    "export.quantize",
     "export.keras",
     "export.agnostic_nms",
     "export.end2end",
@@ -427,8 +427,8 @@ def audit_file(path: Path) -> list[Issue]:
             issues.append(Issue(path, "format-specific-key", "export.workspace 只适用于 TensorRT engine"))
         if "keras" in export and fmt != "saved_model":
             issues.append(Issue(path, "format-specific-key", "export.keras 只适用于 saved_model"))
-        if export.get("int8") is True and not export.get("data"):
-            issues.append(Issue(path, "missing-calibration-data", "export.int8=true 时应提供 export.data 用于校准"))
+        if export.get("quantize") in {8, "w8a16"} and not export.get("data"):
+            issues.append(Issue(path, "missing-calibration-data", "export.quantize=8/w8a16 时应提供 export.data 用于校准"))
 
     return issues
 

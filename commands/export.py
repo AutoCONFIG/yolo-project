@@ -27,6 +27,7 @@ from utils.config import (
     load_yaml_config,
     merge_configs,
     set_boolean_argument,
+    parse_quantize,
     setup_ultralytics_path,
 )
 from utils.constants import DEFAULT_IMGSZ, EXPORT_FORMATS
@@ -54,7 +55,7 @@ Examples:
     python -m commands.export --model best.pt --format engine --half true
 
     # 导出为 OpenVINO (INT8 量化)
-    python -m commands.export --model best.pt --format openvino --int8 true --data coco8.yaml
+    python -m commands.export --model best.pt --format openvino --quantize 8 --data coco8.yaml
 
     # 使用配置文件
     python -m commands.export --config configs/export/example/onnx/detect_example.yaml
@@ -97,7 +98,7 @@ Examples:
     set_boolean_argument(parser, "optimize", "optimize", help_true="TorchScript 移动端优化", help_false="不优化")
 
     # ── Quantization ──────────────────────────────────────────────────
-    set_boolean_argument(parser, "int8", "int8", help_true="INT8 量化 (TensorRT/OpenVINO)", help_false="不使用 INT8")
+    parser.add_argument("--quantize", type=str, default=None, help="导出精度: 8=INT8, 16=FP16, 32=FP32, w8a16/w8a32 (默认 null=FP32)")
     parser.add_argument("--data", type=str, default=None, help="INT8 校准数据集配置")
     parser.add_argument("--split", type=str, default=None, help="校准数据集划分 (默认 val)")
     parser.add_argument("--fraction", type=float, default=None, help="INT8 校准数据集比例 (默认 1.0)")
@@ -135,12 +136,12 @@ def args_to_config(args: argparse.Namespace) -> Dict[str, Any]:
 
     # ── Export options ──
     export_plain = (
-        "opset", "data", "split", "fraction", "workspace",
+        "opset", "data", "split", "fraction", "workspace", "quantize",
         "conf", "iou", "max_det",
     )
     export_bool = (
         "simplify", "dynamic", "half", "nms",
-        "optimize", "int8", "keras", "agnostic_nms", "end2end",
+        "optimize", "keras", "agnostic_nms", "end2end",
     )
     export_cfg = config_from_args(args, plain=export_plain, boolean=export_bool)
     if export_cfg:
@@ -245,7 +246,7 @@ def export(config: Dict):
     half = get_nested_value(config, "export", "half", default=False)
     nms = get_nested_value(config, "export", "nms", default=False)
     optimize = get_nested_value(config, "export", "optimize", default=False)
-    int8 = get_nested_value(config, "export", "int8", default=False)
+    quantize = get_nested_value(config, "export", "quantize")
     data = get_nested_value(config, "export", "data")
     fraction = get_nested_value(config, "export", "fraction")
     split = get_nested_value(config, "export", "split")
@@ -299,12 +300,13 @@ def export(config: Dict):
     print(f"NMS:         {nms}")
     print(f"End2End:     {effective_end2end if effective_end2end is not None else 'auto'}")
     print(f"优化:        {optimize}")
-    print(f"INT8:        {int8}")
+    print(f"量化精度:    {quantize if quantize is not None else 'FP32'}")
     if opset:
         print(f"Opset:       {opset}")
-    if int8 and data:
+    needs_calibration = quantize in {8, "w8a16"}
+    if needs_calibration and data:
         print(f"校准数据:    {data}")
-    if int8 and fraction != 1.0:
+    if needs_calibration and fraction != 1.0:
         print(f"数据比例:    {fraction}")
     if fmt == "engine" and workspace:
         print(f"工作区:      {workspace} GB")
@@ -326,7 +328,7 @@ def export(config: Dict):
         "dynamic": dynamic,
         "half": half,
         "nms": nms,
-        "int8": int8,
+        "quantize": parse_quantize(quantize),
         "optimize": optimize,
         "verbose": verbose,
     }

@@ -20,6 +20,7 @@ from utils.config import (
     merge_configs,
     resolve_config_value,
     set_boolean_argument,
+    parse_quantize,
     setup_ultralytics_path,
     to_bool,
 )
@@ -100,9 +101,9 @@ Examples:
         parser, "save_conf", "save-conf",
         help_true="在 txt 标签中保存置信度分数", help_false="不保存置信度"
     )
-    set_boolean_argument(
-        parser, "int8", "int8",
-        help_true="INT8 量化推理验证", help_false="不使用 INT8"
+    parser.add_argument(
+        "--quantize", type=str, default=None,
+        help="推理精度: 16=FP16, 32=FP32 (默认 null 跟随后端)",
     )
     set_boolean_argument(
         parser, "end2end", "end2end",
@@ -198,7 +199,7 @@ def args_to_config(args: argparse.Namespace) -> Dict[str, Any]:
     val_cfg = config_from_args(
         args,
         boolean=("half", "plots", "save_json", "dnn", "agnostic_nms",
-                 "augment", "rect", "save_conf", "int8", "end2end",
+                 "augment", "rect", "save_conf", "end2end",
                  "save_txt", "save_crop", "show", "show_labels", "show_conf",
                  "show_boxes", "retina_masks", "visualize"),
         plain=("conf", "iou", "max_det", "fraction", "line_width", "workers"),
@@ -282,10 +283,10 @@ def validate(config: Dict):
     if save_conf is not None:
         val_args["save_conf"] = save_conf
 
-    # INT8 量化推理验证
-    int8 = get_nested_value(config, "validation", "int8")
-    if int8 is not None:
-        val_args["int8"] = int8
+    # 推理精度: 16=FP16, 32=FP32, null=跟随后端
+    quantize = get_nested_value(config, "validation", "quantize")
+    if quantize is not None:
+        val_args["quantize"] = parse_quantize(quantize)
 
     # 端到端检测头 (YOLO26/YOLOv10, 无 NMS 推理)
     end2end = get_nested_value(config, "validation", "end2end")

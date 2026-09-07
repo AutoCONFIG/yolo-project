@@ -13,7 +13,7 @@ model:
   visualize: false                          # 可视化模型特征图 (调试用)
   augment: false                            # 测试时增强 TTA (慢但可能提升精度)
   retina_masks: false                       # 高分辨率分割掩码 (segment 任务专用)
-  int8: false                               # INT8 量化推理 (ONNX/TensorRT 等支持)
+  quantize: null                               # 推理精度: null/32=FP32, 16=FP16
   dnn: false                                # 使用 OpenCV DNN 进行 ONNX 推理
   show: false                               # 弹窗显示结果 (需图形界面支持)
   save_frames: false                        # 保存视频推理的每一帧为图片

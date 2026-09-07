@@ -35,6 +35,7 @@ from utils.config import (
     merge_configs,
     resolve_config_value,
     set_boolean_argument,
+    parse_quantize,
     setup_ultralytics_path,
     to_bool,
 )
@@ -66,7 +67,7 @@ Examples:
     set_boolean_argument(parser, "retina_masks", "retina-masks", help_true="高分辨率掩码", help_false="标准掩码")
     parser.add_argument("--vid-stride", type=int, default=None, help="视频帧步长")
     set_boolean_argument(parser, "visualize", "visualize", help_true="可视化特征", help_false="不可视化")
-    set_boolean_argument(parser, "int8", "int8", help_true="INT8 量化", help_false="无 INT8")
+    parser.add_argument("--quantize", type=str, default=None, help="推理精度: 16=FP16, 32=FP32 (默认 null 跟随后端)")
     set_boolean_argument(parser, "dnn", "dnn", help_true="OpenCV DNN ONNX 推理", help_false="不使用 DNN")
     set_boolean_argument(parser, "end2end", "end2end", help_true="端到端检测头 (YOLO26/YOLOv10)", help_false="标准检测头")
     set_boolean_argument(parser, "save_conf", "save-conf", help_true="保存置信度到结果", help_false="不保存置信度")
@@ -112,9 +113,9 @@ def args_to_config(args: argparse.Namespace) -> Dict[str, Any]:
     model_cfg = config_from_args(
         args,
         plain=("model", "imgsz", "device", "batch", "classes",
-               "vid_stride", "line_width", "tracker", "embed", "topk", "kpt_thres"),
+               "vid_stride", "line_width", "tracker", "embed", "topk", "kpt_thres", "quantize"),
         boolean=("stream", "half", "augment", "retina_masks", "visualize",
-                 "int8", "save_frames", "stream_buffer", "save_conf", "dnn", "end2end", "show",
+                 "save_frames", "stream_buffer", "save_conf", "dnn", "end2end", "show",
                  "show_boxes", "persist"),
         rename={"model": "path"},
     )
@@ -169,7 +170,7 @@ def track(config: Dict) -> None:
     vid_stride = get_nested_value(config, "model", "vid_stride", default=1)
     retina_masks = get_nested_value(config, "model", "retina_masks", default=False)
     visualize = get_nested_value(config, "model", "visualize", default=False)
-    int8 = get_nested_value(config, "model", "int8", default=False)
+    quantize = get_nested_value(config, "model", "quantize")
     line_width = get_nested_value(config, "model", "line_width")
     save_frames = get_nested_value(config, "model", "save_frames", default=False)
     stream_buffer = get_nested_value(config, "model", "stream_buffer", default=False)
@@ -230,7 +231,7 @@ def track(config: Dict) -> None:
         retina_masks=retina_masks,
         visualize=visualize,
         embed=embed,
-        int8=int8,
+        quantize=quantize,
         line_width=line_width,
         save_frames=save_frames,
         stream_buffer=stream_buffer,

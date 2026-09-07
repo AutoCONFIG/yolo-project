@@ -19,6 +19,7 @@ Constants:
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -33,15 +34,24 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 def setup_ultralytics_path() -> None:
-    """Add the local ultralytics submodule to sys.path if it exists.
+    """Prefer the local ultralytics submodule in this process and its children.
 
-    Call this at module level in every command script so that
-    ``from ultralytics import YOLO`` resolves to the submodule
-    rather than a system-wide install.
+    Updating ``sys.path`` makes imports in the current process resolve to the
+    submodule. Updating ``PYTHONPATH`` is also required because Ultralytics
+    starts fresh Python processes for multi-GPU DDP training.
     """
     ult_path = PROJECT_ROOT / "ultralytics"
-    if ult_path.exists() and str(ult_path) not in sys.path:
-        sys.path.insert(0, str(ult_path))
+    if not ult_path.exists():
+        return
+
+    ult_path_str = str(ult_path)
+    if ult_path_str not in sys.path:
+        sys.path.insert(0, ult_path_str)
+
+    pythonpath = os.environ.get("PYTHONPATH", "")
+    entries = [entry for entry in pythonpath.split(os.pathsep) if entry]
+    if ult_path_str not in entries:
+        os.environ["PYTHONPATH"] = os.pathsep.join([ult_path_str, *entries])
 
 
 def load_yaml_config(config_path: str) -> Dict[str, Any]:
@@ -138,6 +148,22 @@ def to_bool(value: str | bool | None) -> bool | None:
         if value.lower() == "false":
             return False
     return None
+
+
+def parse_quantize(value: str | int | None) -> int | str | None:
+    """Parse the unified Ultralytics precision selector."""
+    if value is None or isinstance(value, int):
+        return value
+    value = value.strip().lower()
+    if value in {"none", "null", "fp32", "float32"}:
+        return None if value in {"none", "null"} else 32
+    if value in {"fp16", "float16"}:
+        return 16
+    if value.isdigit() and int(value) in {8, 16, 32}:
+        return int(value)
+    if value in {"w8a8", "w16a16", "w8a16", "w8a32"}:
+        return value
+    raise ValueError("quantize 必须是 8、16、32、w8a8、w16a16、w8a16、w8a32 或 null")
 
 
 def set_boolean_argument(

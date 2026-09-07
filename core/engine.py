@@ -58,7 +58,7 @@ class YOLOInference:
         retina_masks: bool = False,
         visualize: bool = False,
         embed: Optional[Union[List[int], int]] = None,
-        int8: bool = False,
+        quantize: Optional[Union[int, str]] = None,
         line_width: Optional[int] = None,
         save_frames: bool = False,
         stream_buffer: bool = False,
@@ -81,7 +81,7 @@ class YOLOInference:
         self.retina_masks = retina_masks
         self.visualize = visualize
         self.embed = embed
-        self.int8 = int8
+        self.quantize = quantize
         self.line_width = line_width
         self.save_frames = save_frames
         self.stream_buffer = stream_buffer
@@ -358,7 +358,7 @@ class YOLOInference:
             vid_stride=self.vid_stride,
             visualize=self.visualize,
             embed=self.embed,
-            int8=self.int8,
+            quantize=self.quantize,
             save_conf=self.save_conf,
             save_frames=self.save_frames,
             stream_buffer=self.stream_buffer,
