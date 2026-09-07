@@ -23,13 +23,13 @@ from threading import Lock
 # ===================================================================
 
 # 路径配置
-ROOT_DIRECTORY = "/data2/kaiyun/datasets_11_classes_remap"  # 图片根目录路径
+ROOT_DIRECTORY = "/data2/kaiyun/datasets_11_classes"  # 图片根目录路径
 OUTPUT_DIRECTORY = None  # 输出目录，None表示使用图片根目录路径
 
 # 按子文件夹模式配置
 SCAN_BY_SUBFOLDERS = True  # True: 按一级子文件夹分别生成txt
                            # False: 扫描整个目录，输出到根目录
-SKIP_EXISTING_FOLDERS = True  # True: 跳过已有txt的子文件夹
+SKIP_EXISTING_FOLDERS = False  # True: 跳过已有txt的子文件夹
 
 # 分割比例配置
 TRAIN_RATIO = 0.9    # 训练集比例
@@ -40,7 +40,7 @@ ALLOW_OVERLAP = False  # 是否允许训练集和验证集重复
 RANDOM_SEED = 36  # 随机种子
 FILE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.bmp']  # 支持的图片格式
 LABEL_SUFFIX = ".txt"  # 标签文件后缀
-EXPECTED_LABEL_IDS = "0-11"  # 期望的标签ID范围配置
+EXPECTED_LABEL_IDS = "0-10"  # 期望的标签ID范围配置
 
 # ============ 核心功能配置 =============
 SKIP_IMAGE_CHECK = True       # 【新增】True: 不验证图片是否损坏，只要有txt就索引
@@ -51,8 +51,8 @@ ENABLE_BATCH_PREPROCESS = True # 启用多进程元数据预处理
 PREPROCESS_WORKERS = 12        # 预处理进程数
 
 # 输出文件名配置
-TRAIN_FILE_NAME = "train_20260807.txt"
-VAL_FILE_NAME = "test_20260807.txt"
+TRAIN_FILE_NAME = "train_20260907.txt"
+VAL_FILE_NAME = "test_20260907.txt"
 LOG_FILE_NAME = "index_image_errors.log"
 
 # ===================================================================
