@@ -4,9 +4,9 @@ YOLO Unified CLI Entry Point
 
 Usage:
 
-    python yolo.py configs/train/chaoyuan.yaml
+    python yolo.py configs/train/chaoyuan/chaoyuan.yaml
     python yolo.py configs/validate/val.yaml
-    python yolo.py configs/predict/chaoyuan.yaml
+    python yolo.py configs/predict/chaoyuan/chaoyuan.yaml
     python yolo.py configs/export/example/onnx/detect_example.yaml
 
 Mode is auto-detected from the 'mode' field in the YAML config file.

@@ -12,7 +12,7 @@ model:
 
 
 data:
-  config: configs/datasets/xiaotu_8classes.yaml  # 数据集配置文件路径
+  config: configs/datasets/xiaotu_8classes/xiaotu_8classes.yaml  # 数据集配置文件路径
   split: val                                     # 数据集划分: train/val/test
 
 train:

@@ -5,7 +5,7 @@ Internal training implementation dispatched by the unified YAML entry point.
 
 Typical usage::
 
-    python yolo.py configs/train/chaoyuan.yaml
+    python yolo.py configs/train/chaoyuan/chaoyuan.yaml
 """
 
 import argparse
@@ -165,10 +165,10 @@ def parse_args():
         epilog="""
 Examples:
     # Train with config file
-    python -m commands.train --config configs/train/chaoyuan.yaml
+    python -m commands.train --config configs/train/chaoyuan/chaoyuan.yaml
 
     # Train with CLI overrides
-    python -m commands.train --config configs/train/chaoyuan.yaml --epochs 50 --batch 32
+    python -m commands.train --config configs/train/chaoyuan/chaoyuan.yaml --epochs 50 --batch 32
 
     # Quick training without config
     python -m commands.train --model yolo26n.pt --data coco8.yaml --epochs 100

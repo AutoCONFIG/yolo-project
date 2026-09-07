@@ -57,7 +57,7 @@ Examples:
     python -m commands.export --model best.pt --format openvino --int8 true --data coco8.yaml
 
     # 使用配置文件
-    python -m commands.export --config configs/export/onnx.yaml
+    python -m commands.export --config configs/export/example/onnx/detect_example.yaml
 
     # 导出并验证
     python -m commands.export --model best.pt --verify true --source test_image.jpg

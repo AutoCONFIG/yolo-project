@@ -7,15 +7,27 @@
 
 ```
 configs/predict/
-├── chaoyuan.yaml        # 潮源模型推理配置
-├── parking_pose.yaml    # 停车位姿态推理配置
-├── example/             # 示例配置目录
-│   ├── detect_example.yaml
-│   ├── segment_example.yaml
-│   ├── classify_example.yaml
-│   ├── pose_example.yaml
-│   ├── obb_example.yaml
-│   └── track_example.yaml
+├── anquandai/           # 安全带/手机/烟雾分类推理配置
+│   ├── belt.yaml
+│   ├── belthy.yaml
+│   ├── phone.yaml
+│   ├── phonehy.yaml
+│   └── smoke.yaml
+├── chaoyuan/            # 潮源模型推理配置
+│   └── chaoyuan.yaml
+├── parking_pose/        # 停车位姿态推理配置
+│   └── parking_pose.yaml
+├── xiaotu_8classes/     # 小图8类推理配置
+│   └── xiaotu_8classes.yaml
+├── 11classes/           # 11类检测推理配置
+│   └── 11classes.yaml
+└── example/             # 示例配置目录
+    ├── detect_example.yaml
+    ├── segment_example.yaml
+    ├── classify_example.yaml
+    ├── pose_example.yaml
+    ├── obb_example.yaml
+    └── track_example.yaml
 ```
 
 ## 使用方法

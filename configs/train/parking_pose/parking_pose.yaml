@@ -10,7 +10,7 @@ model:
   task: pose                                  # 任务类型: detect/segment/classify/pose/obb
 
 data:
-  config: configs/datasets/parking_pose.yaml  # 数据集配置文件路径
+  config: configs/datasets/parking_pose/parking_pose.yaml  # 数据集配置文件路径
   split: val                                  # 数据集划分: train/val/test
 
 train:

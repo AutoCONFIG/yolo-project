@@ -8,7 +8,7 @@ argument parsing and delegates to ``core.engine``.
 
 Usage::
 
-    python yolo.py configs/predict/chaoyuan.yaml
+    python yolo.py configs/predict/chaoyuan/chaoyuan.yaml
 """
 
 import argparse
@@ -173,7 +173,7 @@ def parse_args() -> argparse.Namespace:
 Examples:
     python -m commands.predict --model best.pt --input images/ --output results/
     python -m commands.predict --model model.onnx --input images/
-    python yolo.py configs/predict/chaoyuan.yaml
+    python yolo.py configs/predict/chaoyuan/chaoyuan.yaml
         """,
     )
 
