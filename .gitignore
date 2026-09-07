@@ -4,3 +4,10 @@ weights/
 __pycache__/
 .vscode/
 AGENTS.md
+docs/
+tests/
+.pytest_cache/
+.ruff_cache/
+claude.md
+.mimosa/
+.omo/

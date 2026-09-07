@@ -5,7 +5,7 @@
 mode: predict
 
 model:
-  path: /media/yun/de2a43ce-446c-4a62-99b3-8ddc6ea1ef87/yolo-project/runs/parking_spot/weights/best.pt  # 模型路径 (.pt 权重 或 .onnx)
+  path: weights/best.pt  # 模型路径 (.pt 权重 或 .onnx)
   imgsz: 640                                       # 输入图像尺寸 (默认 640, 分类建议 224)
   device: auto                                     # 计算设备: null=自动, cpu, 0, 0,1 等
   batch: 1                                         # 批次大小 (推理默认 1, 训练默认 16)
@@ -28,7 +28,7 @@ model:
   kpt_thres: 0.5                                   # 关键点置信度阈值 (pose 任务专用, 默认 0.5)
 
 io:
-  input: /media/yun/706bc403-c76c-4fdd-8a3f-d954b6189048/实习/停车泊位昆明/  # 输入路径 (图片/目录/视频/URL/摄像头编号)
+  input:   # 输入路径 (图片/目录/视频/URL/摄像头编号)
   output: runs/predict                             # 输出目录路径
   save_vis: true                                   # 保存可视化结果图片/视频
   save_json: false                                 # 保存推理结果为 JSON 格式

@@ -1,19 +1,11 @@
 """
 YOLO Training Module
 =====================
-Standalone training module invoked via ``python yolo.py train`` or
-``python -m commands.train``.
-
-Uses YAML config files and/or CLI arguments.  CLI takes precedence over YAML.
+Internal training implementation dispatched by the unified YAML entry point.
 
 Typical usage::
 
-    # Via unified entry point
-    python yolo.py train --config configs/train/chaoyuan.yaml
-    python yolo.py train --model yolo26n.pt --data coco8.yaml --epochs 50
-
-    # Direct invocation
-    python -m commands.train --config configs/train/chaoyuan.yaml
+    python yolo.py configs/train/chaoyuan.yaml
 """
 
 import argparse
@@ -41,6 +33,7 @@ setup_ultralytics_path()
 from ultralytics import YOLO
 from ultralytics.nn.tasks import yaml_model_load
 from ultralytics.utils import LOGGER, YAML
+from ultralytics.utils.files import increment_path
 
 
 def _safe_wrap_plot_methods(validator):
@@ -595,6 +588,14 @@ def train(config: Dict):
     name = train_args.get("name")
 
     task_for_dir = task
+    # YAML 里 name/project 写成纯数字（如 name: 20260814）会被解析成 int，
+    # 拼路径时 PosixPath / int 会报错，这里统一强转成 str。
+    if name is not None:
+        name = str(name)
+        train_args["name"] = name
+    if project is not None:
+        project = str(project)
+        train_args["project"] = project
     if task_for_dir is None:
         try:
             from ultralytics import YOLO as _YOLO
@@ -608,10 +609,14 @@ def train(config: Dict):
         name = "train"
         train_args["name"] = name
     if project:
-        save_dir = (project_root / project / name).resolve()
+        save_dir = (project_root / project / name)
     else:
-        save_dir = (project_root / name).resolve()
-    train_args["save_dir"] = str(save_dir)
+        save_dir = (project_root / name)
+    # exist_ok=False 时递增目录名（train_xxx-2、-3…），避免新训练覆盖旧 output；
+    # exist_ok=True 时沿用原路径。与 Ultralytics get_save_dir 行为一致。
+    exist_ok = train_args.get("exist_ok", False)
+    save_dir = increment_path(save_dir, exist_ok=exist_ok)
+    train_args["save_dir"] = str(save_dir.resolve())
 
     print(f"\n{'='*60}")
     print("YOLO 训练配置")
@@ -632,8 +637,36 @@ def train(config: Dict):
 
     last_pt = (save_dir / "weights" / "last.pt") if save_dir else None
     if resume and last_pt and last_pt.exists():
-        print(f"从检查点恢复: {last_pt}")
-        model = YOLO(str(last_pt))
+        # 检查 last.pt 是否为可恢复检查点（含 epoch/optimizer 状态）。
+        # 训练正常结束后 strip_optimizer 会把 epoch 置 -1、optimizer 置 None，
+        # 此类 last.pt 无法续训，Ultralytics 会静默降级为新训练——这里显式告知用户。
+        from ultralytics.utils.patches import torch_load
+
+        try:
+            ckpt_info = torch_load(str(last_pt), map_location="cpu")
+            resumable = (
+                isinstance(ckpt_info, dict)
+                and ckpt_info.get("epoch", -1) >= 0
+                and ckpt_info.get("optimizer") is not None
+            )
+        except Exception as e:
+            resumable = False
+            LOGGER.warning(f"读取检查点失败，无法判断是否可恢复: {last_pt} ({e})")
+
+        if resumable:
+            print(f"从检查点恢复: {last_pt} (epoch={ckpt_info.get('epoch')})")
+            model = YOLO(str(last_pt))
+        else:
+            LOGGER.warning(
+                f"last.pt 不可恢复（缺少 epoch/optimizer 状态，可能是训练已正常结束被 strip）：{last_pt}\n"
+                "将从头开始新训练。如需续训，请使用训练中途中断的 last.pt。"
+            )
+            if model_yaml:
+                model = YOLO(model_yaml, task=task) if task else YOLO(model_yaml)
+                if isinstance(pretrained, str):
+                    model.load(pretrained)
+            else:
+                model = YOLO(model_name)
     else:
         if resume:
             print(f"检查点未找到{f': {last_pt}' if last_pt else ' (未指定 project/name)'}, 从零开始训练")
@@ -658,11 +691,13 @@ def train(config: Dict):
 
     results = model.train(**train_args)
 
+    # model.train() 返回 metrics（DDP 下可能是 dict），不含 save_dir 属性。
+    # 输出目录用本地已算出的 save_dir，避免 AttributeError。
     print(f"\n{'='*60}")
     print("训练完成！")
-    print(f"结果保存至: {results.save_dir}")
-    print(f"最佳权重: {results.save_dir}/weights/best.pt")
-    print(f"最后权重: {results.save_dir}/weights/last.pt")
+    print(f"结果保存至: {save_dir}")
+    print(f"最佳权重: {save_dir}/weights/best.pt")
+    print(f"最后权重: {save_dir}/weights/last.pt")
     print(f"{'='*60}\n")
 
     return results

@@ -5,7 +5,7 @@
 mode: predict
 
 model:
-  path: runs/detect/chaoyuan/train_20260709_p2/weights/best.pt  # 模型路径 (.pt 权重 或 .onnx)
+  path: runs/detect/11classes/train_20260810_p2/weights/best.pt  # 模型路径 (.pt 权重 或 .onnx)
   imgsz: 1280                                       # 输入图像尺寸 (默认 640, 分类建议 224)
   device: auto                                      # 计算设备: null=自动, cpu, 0, 0,1 等
   batch: 32                                         # 批次大小 (推理默认 1, 训练默认 16)
@@ -27,17 +27,17 @@ model:
   classes: null                                     # 类别过滤 (null=全部, [0,1]=只保留指定类别)
 
 io:
-  input: /data2/kaiyun/processing/public0729/              # 输入路径 (图片/目录/视频/URL/摄像头编号)
-  output: runs/predict/chaoyuan/public0729                # 输出目录路径
+  input: /data2/kaiyun/datasets_11_classes/第六批处理              # 输入路径 (图片/目录/视频/URL/摄像头编号)
+  output: runs/predict/11classes/第六批处理                # 输出目录路径
   save_vis: true                                    # 保存可视化结果图片/视频
   save_json: false                                  # 保存推理结果为 JSON 格式
   save_txt: true                                    # 保存 YOLO 格式 txt 标签
   save_crop: false                                  # 保存裁剪后的检测目标图片
 
 nms:
-  conf: 0.4                                        # 置信度阈值 (默认 0.25)
+  conf: 0.25                                        # 置信度阈值 (默认 0.25)
   iou: 0.4                                          # NMS IoU 阈值 (默认 0.7, 越大保留越多框)
-  max_det: 100                                      # 每图最大检测数 (默认 300)
+  max_det: 300                                      # 每图最大检测数 (默认 300)
   agnostic_nms: false                               # 类别无关 NMS (不同类别框也做 NMS)
 
 visualization:

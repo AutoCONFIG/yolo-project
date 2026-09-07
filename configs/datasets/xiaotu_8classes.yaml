@@ -3,10 +3,10 @@
 # 小兔8类目标检测数据集
 # 适用任务: detect
 
-path: /data2/kaiyun/datasets_xiaotu_label  # 数据集根目录路径 (相对路径或绝对路径)
+path: /data2/kaiyun/datasets_feijidongche_xiaotu  # 数据集根目录路径 (相对路径或绝对路径)
 
-train: images/train
-val: images/val  # 验证集图像目录 (相对于path)
+train: train.txt
+val: test.txt  # 验证集图像目录 (相对于path)
 
 names:  # 类别名称映射 {class_id: class_name}
   0: person

@@ -27,9 +27,9 @@ DST_DIR = r"/data2/kaiyun/datasets_anquandai"
 VAL_RATIO = 0.2
 SEED = 0
 
-BELT_OPTIONS = ["已系安全带", "无安全带", "其他"]
-SMOKE_OPTIONS = ["抽烟", "无抽烟", "其他"]
-PHONE_OPTIONS = ["打电话", "玩手机", "无电话", "其他"]
+BELT_OPTIONS = ["belt_on", "no_belt", "other"]
+SMOKE_OPTIONS = ["smoking", "no_smoking", "other"]
+PHONE_OPTIONS = ["calling", "using_phone", "no_phone", "other"]
 
 IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".bmp", ".webp")
 

@@ -1,0 +1,36 @@
+# Example Detection Dataset Configuration
+# =========================================
+# 目标检测数据集配置示例
+# 适用任务: detect (目标检测)
+# 数据集格式: YOLO格式 (images/ + labels/)
+
+# 数据集根路径 (相对路径或绝对路径)
+# 三种写法:
+#   1. 相对路径: ../datasets/example_dataset
+#   2. 绝对路径: /path/to/datasets/example_dataset
+#   3. 数据集名称 (自动下载): coco8, coco128, voc 等
+path: /data2/kaiyun/datasets_11_classes               # 数据集根目录路径 (相对路径或绝对路径)
+
+# 图像路径 (相对于 path)
+train: train_20260807.txt                             # 训练集图像目录 (相对于path)
+val: test_20260807.txt                                 # 验证集图像目录 (相对于path)
+
+# 类别名称映射 (class_id: class_name)
+# 重要: class_id 必须从 0 开始连续编号, 且与标签文件一致
+
+names:                                      # 类别名称映射 {class_id: class_name}
+  0: vehicle                                # 机动车
+  1: person                                 # 人
+  2: non_motor_vehicle                     # 非机动车
+  3: tricycle                               # 三轮车
+  4: traffic_cone                           # 锥桶
+  5: road_debris                            # 路面抛洒物
+  6: smoke                                  # 烟
+  7: fire                                   # 火
+  8: fog                                    # 雾
+  9: traffic_sign                          # 交通标志牌
+  10: traffic_light                          # 信号灯
+
+
+# 可选: 自动下载数据集的URL或脚本
+# download: https://example.com/dataset.zip     # 下载数据集 (支持URL或脚本)

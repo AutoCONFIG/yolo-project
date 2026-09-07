@@ -1,19 +1,11 @@
 """
 YOLO Validation Module
 ========================
-Standalone validation module invoked via ``python yolo.py val`` or
-``python -m commands.val``.
-
-Uses YAML config files and/or CLI arguments.  CLI takes precedence over YAML.
+Internal validation implementation dispatched by the unified YAML entry point.
 
 Typical usage::
 
-    # Via unified entry point
-    python yolo.py val --config configs/validate/val.yaml
-    python yolo.py val --model runs/detect/train/weights/best.pt --data coco8.yaml
-
-    # Direct invocation
-    python -m commands.val --config configs/validate/val.yaml
+    python yolo.py configs/validate/val.yaml
 """
 
 import argparse

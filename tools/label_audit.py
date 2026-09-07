@@ -63,14 +63,14 @@ DEFAULT_MODELS = ["runs/detect/chaoyuan/train_20260512_base_p2/weights/best_241.
 # 数据集根目录或数据集 YAML。
 # 这里用 Unicode 转义是为了避免 Windows 终端/编辑器编码问题；
 # 运行时实际路径就是：D:\新建文件夹。
-DEFAULT_DATA = r"/media/yun/706bc403-c76c-4fdd-8a3f-d954b6189048/新建文件夹/"
+DEFAULT_DATA = r" "
 
 # 主审计输出目录：保存 issues.csv、review_lists/*.csv、summary.json 和可视化图。
-DEFAULT_OUTPUT = r"/media/yun/706bc403-c76c-4fdd-8a3f-d954b6189048/label_audit_result"
+DEFAULT_OUTPUT = r" "
 
 # 提取出来给人工复核的数据目录。会保留原始相对子路径：
 # extract\labels\0105...\x.txt 修好后可按相同路径覆盖回原始数据。
-DEFAULT_EXTRACT_DIR = r"/media/yun/706bc403-c76c-4fdd-8a3f-d954b6189048/label_audit_extract"
+DEFAULT_EXTRACT_DIR = r" "
 
 # None 表示扫描自动识别到的所有目录/split。
 # 如果是标准 YAML 数据集，可以改成 ["train"]、["val"] 或 ["train", "val"]。

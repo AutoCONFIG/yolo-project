@@ -4,7 +4,7 @@
 mode: export
 
 model:
-  path: runs/detect/chaoyuan/train_20260715_p2/weights/best.pt  # 模型路径 (.pt 权重 或 .onnx)
+  path: runs/detect/11classes/train_20260717_p2/weights/best.pt  # 模型路径 (.pt 权重 或 .onnx)
   format: onnx                             # 导出格式: onnx/torchscript/openvino/engine 等
   imgsz: 1280                               # 输入图像尺寸 (默认 640, 分类建议 224)
   batch: 1                                 # 批次大小 (推理默认 1, 训练默认 16)
