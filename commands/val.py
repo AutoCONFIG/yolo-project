@@ -77,7 +77,6 @@ Examples:
     parser.add_argument("--embed", type=int, nargs="+", default=None, help="特征嵌入层索引")
     parser.add_argument("--vid-stride", type=int, default=None, help="视频帧间隔")
     parser.add_argument("--fraction", type=float, default=None, help="使用数据集的比例 (0.0-1.0)")
-    set_boolean_argument(parser, "half", "half", help_true="FP16 半精度验证", help_false="全精度验证")
     set_boolean_argument(parser, "plots", "plots", help_true="保存验证图表", help_false="不保存图表")
     set_boolean_argument(
         parser, "save_json", "save-json", help_true="保存 COCO JSON 结果", help_false="不保存 JSON"
@@ -198,7 +197,7 @@ def args_to_config(args: argparse.Namespace) -> Dict[str, Any]:
     # Validation
     val_cfg = config_from_args(
         args,
-        boolean=("half", "plots", "save_json", "dnn", "agnostic_nms",
+        boolean=("plots", "save_json", "dnn", "agnostic_nms",
                  "augment", "rect", "save_conf", "end2end",
                  "save_txt", "save_crop", "show", "show_labels", "show_conf",
                  "show_boxes", "retina_masks", "visualize"),
@@ -240,7 +239,6 @@ def validate(config: Dict):
         "dnn": get_nested_value(config, "validation", "dnn", default=False),
         "agnostic_nms": get_nested_value(config, "validation", "agnostic_nms", default=False),
         "augment": get_nested_value(config, "validation", "augment", default=False),
-        "half": get_nested_value(config, "validation", "half", default=False),
         "max_det": get_nested_value(config, "validation", "max_det", default=300),
         "verbose": get_nested_value(config, "output", "verbose", default=True),
     }

@@ -52,7 +52,6 @@ class YOLOInference:
         classes: Optional[List[int]] = None,
         batch_size: int = 1,
         stream: bool = False,
-        half: bool = False,
         augment: bool = False,
         vid_stride: int = 1,
         retina_masks: bool = False,
@@ -75,7 +74,6 @@ class YOLOInference:
         self.classes_filter = classes
         self.batch_size = batch_size
         self.stream = stream
-        self.half = half
         self.augment = augment
         self.vid_stride = vid_stride
         self.retina_masks = retina_masks
@@ -353,7 +351,6 @@ class YOLOInference:
             classes=self.classes_filter,
             verbose=False,
             stream=self.stream,
-            half=self.half,
             augment=self.augment,
             vid_stride=self.vid_stride,
             visualize=self.visualize,

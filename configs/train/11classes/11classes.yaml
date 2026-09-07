@@ -17,7 +17,7 @@ data:
 train:
   epochs: 600                                           # 总训练轮数 (早停可能提前结束)
   time:                                                 # 最大训练时长(小时), 设置后覆盖 epochs
-  batch: 48                                             # 批次大小 (推理默认 1, 训练默认 16)
+  batch: 64                                             # 批次大小 (推理默认 1, 训练默认 16)
   imgsz: 1280                                            # 输入图像尺寸 (默认 640, 分类建议 224)
   device: 0,1,2,3,4,5,6,7                                          # 计算设备: null=自动, cpu, 0, 0,1 等
   workers: 2                                            # 数据加载进程数 (HDD 建议 1-2, SSD 建议 4-8)
@@ -73,7 +73,7 @@ validation:
   conf:                                                 # 置信度阈值 (val 默认 0.001, predict 默认 0.25)
   iou: 0.7                                              # NMS IoU 阈值 (默认 0.7, 越大保留越多框)
   max_det: 300                                          # 每图最大检测数 (默认 300)
-  half: false                                           # FP16 半精度验证
+  quantize: null                                 # 推理精度: null/32=FP32, 16=FP16
   plots: true                                           # 生成验证图表 (PR曲线/混淆矩阵/F1曲线等)
   save_json: false                                      # 保存 COCO 格式 JSON 结果 (用于官方评估工具)
   dnn: false                                            # 使用 OpenCV DNN 进行 ONNX 推理验证

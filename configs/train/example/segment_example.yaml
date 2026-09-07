@@ -76,7 +76,7 @@ validation:
   conf:                                                  # 置信度阈值 (val 默认 0.001, predict 默认 0.25)
   iou: 0.7                                               # NMS IoU 阈值 (默认 0.7, 越大保留越多框)
   max_det: 300                                           # 每图最大检测数 (默认 300)
-  half: false                                            # FP16 半精度验证
+  quantize: null                                 # 推理精度: null/32=FP32, 16=FP16
   plots: true                                            # 生成验证图表 (PR曲线/混淆矩阵/F1曲线等)
   save_json: false                                       # 保存 COCO 格式 JSON 结果 (用于官方评估工具)
   dnn: false                                             # 使用 OpenCV DNN 进行 ONNX 推理验证

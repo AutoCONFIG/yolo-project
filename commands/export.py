@@ -49,10 +49,10 @@ Examples:
     python -m commands.export --model best.pt
 
     # 导出为 ONNX 并启用 FP16 和动态输入
-    python -m commands.export --model best.pt --half true --dynamic true
+    python -m commands.export --model best.pt --quantize 16 --dynamic true
 
     # 导出为 TensorRT (FP16)
-    python -m commands.export --model best.pt --format engine --half true
+    python -m commands.export --model best.pt --format engine --quantize 16
 
     # 导出为 OpenVINO (INT8 量化)
     python -m commands.export --model best.pt --format openvino --quantize 8 --data coco8.yaml
@@ -84,7 +84,6 @@ Examples:
     parser.add_argument("--opset", type=int, default=None, help="ONNX opset 版本 (自动检测)")
     set_boolean_argument(parser, "simplify", "simplify", help_true="简化 ONNX 图 (默认开启)", help_false="不简化")
     set_boolean_argument(parser, "dynamic", "dynamic", help_true="动态输入形状", help_false="固定输入形状")
-    set_boolean_argument(parser, "half", "half", help_true="FP16 半精度导出", help_false="全精度导出")
     set_boolean_argument(parser, "nms", "nms", help_true="在导出模型中嵌入 NMS", help_false="不嵌入 NMS")
 
     # ── NMS options (when nms=True) ──────────────────────────────────────
@@ -140,7 +139,7 @@ def args_to_config(args: argparse.Namespace) -> Dict[str, Any]:
         "conf", "iou", "max_det",
     )
     export_bool = (
-        "simplify", "dynamic", "half", "nms",
+        "simplify", "dynamic", "nms",
         "optimize", "keras", "agnostic_nms", "end2end",
     )
     export_cfg = config_from_args(args, plain=export_plain, boolean=export_bool)
@@ -243,7 +242,6 @@ def export(config: Dict):
     opset = get_nested_value(config, "export", "opset")
     simplify = get_nested_value(config, "export", "simplify", default=True)
     dynamic = get_nested_value(config, "export", "dynamic", default=False)
-    half = get_nested_value(config, "export", "half", default=False)
     nms = get_nested_value(config, "export", "nms", default=False)
     optimize = get_nested_value(config, "export", "optimize", default=False)
     quantize = get_nested_value(config, "export", "quantize")
@@ -294,7 +292,6 @@ def export(config: Dict):
     print(f"图像尺寸:    {imgsz}")
     print(f"批大小:      {batch}")
     print(f"设备:        {device or 'auto'}")
-    print(f"FP16 (半精度): {half}")
     print(f"动态输入:    {dynamic}")
     print(f"简化:        {simplify}")
     print(f"NMS:         {nms}")
@@ -326,7 +323,6 @@ def export(config: Dict):
         "batch": batch,
         "simplify": simplify,
         "dynamic": dynamic,
-        "half": half,
         "nms": nms,
         "quantize": parse_quantize(quantize),
         "optimize": optimize,

@@ -80,7 +80,7 @@ augmentation:
 
 validation:
   val: true      # 训练期间是否运行验证
-  half: false    # FP16 半精度验证
+  quantize: null                                 # 推理精度: null/32=FP32, 16=FP16
   plots: true    # 生成验证图表 (混淆矩阵/训练曲线等)
   augment: false # 测试时增强 TTA (慢但可能提升精度)
 
