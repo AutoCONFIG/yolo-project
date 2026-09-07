@@ -247,6 +247,7 @@ def batch_save(entries: list[tuple[Path, Path]], args):
     save_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"\n批量保存: 共 {len(entries)} 张 -> {save_dir}")
+    labels_root = Path(args.labels)
     for i, (label_path, img_path) in enumerate(entries):
         img = cv2.imdecode(np.fromfile(str(img_path), dtype=np.uint8), cv2.IMREAD_COLOR)
         if img is None:
@@ -265,8 +266,16 @@ def batch_save(entries: list[tuple[Path, Path]], args):
             kpt_names=args.kpt_names_list,
         )
 
-        out_path = save_dir / f"{img_path.stem}.jpg"
-        cv2.imencode(".jpg", vis)[1].tofile(str(out_path))
+        # 输出保留标签的子目录结构，避免不同子目录同名图片互相覆盖
+        try:
+            rel_parent = label_path.relative_to(labels_root).parent
+        except ValueError:
+            rel_parent = Path(".")
+        out_path = save_dir / rel_parent / img_path.name
+        if out_path.suffix.lower() not in {".jpg", ".jpeg", ".png"}:
+            out_path = out_path.with_suffix(".jpg")
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        cv2.imencode(out_path.suffix, vis)[1].tofile(str(out_path))
 
         if (i + 1) % 50 == 0 or i == len(entries) - 1:
             print(f"  进度: {i + 1}/{len(entries)}")
